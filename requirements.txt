@@ -1,0 +1,17 @@
+# Numerical computing
+numpy
+numba
+
+# Visualisation
+matplotlib
+pyvista
+
+# OpenAI API
+openai
+
+# Testing
+pytest
+
+# Useful for notebooks / experiments
+jupyter
+ipykernel
