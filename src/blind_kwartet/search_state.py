@@ -13,10 +13,14 @@ from .deals import (
     CARD_INDEX,
     CARDS_PER_CATEGORY,
     INITIAL_DEALS,
+    INITIAL_OWNER_MASKS,
+    N_CATEGORIES,
     N_PLAYERS,
     TOTAL_CARDS,
     deal_ids,
 )
+from .exceptions import SearchInvariantError
+from .moves import AnswerMove, Move, NO, QuestionMove, QuartetMove, YES
 
 NO_OVERRIDE = -1
 
@@ -62,13 +66,10 @@ class SearchState:
 
     def current_owner(self, deal_id: int, card: int | str) -> int:
         card_index = CARD_INDEX[card] if isinstance(card, str) else card
-<<<<<<< HEAD
-=======
         if card_index not in range(TOTAL_CARDS):
             raise ValueError("invalid card")
         if deal_id not in range(len(INITIAL_DEALS)):
             raise ValueError("invalid deal id")
->>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
         override = self.current_owner_override[card_index]
         return (override if override != NO_OVERRIDE
                 else INITIAL_DEALS[deal_id].owner_by_card[card_index])
@@ -85,8 +86,6 @@ class SearchState:
         )
         return replace(self, possible_initial_deals=bitset)
 
-<<<<<<< HEAD
-=======
     def normalize_overrides(self) -> "SearchState":
         """Remove overrides already implied by every surviving deal."""
         if not self.possible_initial_deals:
@@ -104,7 +103,195 @@ class SearchState:
                 overrides[card] = NO_OVERRIDE
         return replace(self, current_owner_override=tuple(overrides))
 
->>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
+    def _category_cards(self, category: int) -> range:
+        if category not in range(N_CATEGORIES):
+            raise ValueError("invalid category")
+        start = category * CARDS_PER_CATEGORY
+        return range(start, start + CARDS_PER_CATEGORY)
+
+    def _has_quartet(self, deal_id: int, category: int, player: int) -> bool:
+        return all(
+            self.current_owner(deal_id, card) == player
+            for card in self._category_cards(category)
+        )
+
+    def _owner_mask(self, player: int, card: int) -> int:
+        override = self.current_owner_override[card]
+        if override != NO_OVERRIDE:
+            return self.D if override == player else 0
+        return INITIAL_OWNER_MASKS[player][card] & self.D
+
+    def _quartet_mask(self, category: int, player: int) -> int:
+        mask = self.D
+        for card in self._category_cards(category):
+            mask &= self._owner_mask(player, card)
+        return mask
+
+    def _forced_holder(self, category: int) -> int | None:
+        for player in range(N_PLAYERS):
+            if self._quartet_mask(category, player) == self.D:
+                return player
+        return None
+
+    @property
+    def resolved_categories(self) -> frozenset[int]:
+        return frozenset(
+            category for category in range(N_CATEGORIES)
+            if self._forced_holder(category) is not None
+        )
+
+    def forced_quartets(self) -> tuple[QuartetMove, ...]:
+        return tuple(
+            QuartetMove(category)
+            for category in range(N_CATEGORIES)
+            if self._forced_holder(category) is not None
+        )
+
+    def quartet_holders(self) -> tuple[int | None, ...]:
+        return tuple(
+            self._forced_holder(category)
+            for category in range(N_CATEGORIES)
+        )
+
+    @property
+    def quartet_scores(self) -> tuple[int, ...]:
+        scores = [0] * N_PLAYERS
+        for holder in self.quartet_holders():
+            if holder is not None:
+                scores[holder] += 1
+        return tuple(scores)
+
+    @property
+    def scores(self) -> tuple[int, ...]:
+        return self.quartet_scores
+
+    @property
+    def is_terminal(self) -> bool:
+        return len(self.resolved_categories) == N_CATEGORIES
+
+    @property
+    def terminal(self) -> bool:
+        return self.is_terminal
+
+    def _mask(self, predicate) -> int:
+        return sum(
+            1 << deal_id
+            for deal_id in self.surviving_deal_ids()
+            if predicate(deal_id)
+        )
+
+    def _silence_mask(self, actor: int) -> int:
+        resolved = self.resolved_categories
+        quartet_worlds = 0
+        for category in range(N_CATEGORIES):
+            if category not in resolved:
+                quartet_worlds |= self._quartet_mask(category, actor)
+        return self.D & ~quartet_worlds
+
+    def _validate_move(self, move: QuestionMove) -> None:
+        if not isinstance(move, QuestionMove):
+            raise TypeError("expected QuestionMove")
+        if move.target not in range(N_PLAYERS) or move.target == self.actor:
+            raise ValueError("invalid question target")
+        if move.category not in range(N_CATEGORIES):
+            raise ValueError("invalid question category")
+        if move.card not in self._category_cards(move.category):
+            raise ValueError("card is not in question category")
+
+    def _question_context(self, move: QuestionMove) -> "QuestionContext":
+        self._validate_move(move)
+        if move.category in self.resolved_categories:
+            raise ValueError("category is already resolved")
+        silenced = replace(
+            self,
+            possible_initial_deals=self._silence_mask(self.actor),
+        )
+        family_mask = 0
+        for card in silenced._category_cards(move.category):
+            family_mask |= silenced._owner_mask(self.actor, card)
+        question_mask = silenced.D & family_mask & ~silenced._owner_mask(
+            self.actor, move.card
+        )
+        if not question_mask:
+            raise ValueError("question is incompatible with every deal")
+        questioned = replace(silenced, possible_initial_deals=question_mask)
+        yes_mask = questioned._owner_mask(move.target, move.card)
+        no_mask = questioned.D & ~yes_mask
+        return QuestionContext(questioned, move, yes_mask, no_mask)
+
+    def legal_questions(self) -> tuple[QuestionMove, ...]:
+        if self.is_terminal:
+            return ()
+        moves = []
+        for category in range(N_CATEGORIES):
+            if category in self.resolved_categories:
+                continue
+            for target in range(N_PLAYERS):
+                if target == self.actor:
+                    continue
+                for card in self._category_cards(category):
+                    try:
+                        self._question_context(QuestionMove(target, category, card))
+                    except ValueError:
+                        continue
+                    moves.append(QuestionMove(target, category, card))
+        return tuple(moves)
+
+    def _legal_questions_for(self, actor: int) -> tuple[QuestionMove, ...]:
+        return replace(self, actor=actor).legal_questions()
+
+    def legal_quartets(self) -> tuple[QuartetMove, ...]:
+        if self.is_terminal:
+            return ()
+        moves = []
+        for category in range(N_CATEGORIES):
+            if category in self.resolved_categories:
+                continue
+            if self._quartet_mask(category, self.actor):
+                moves.append(QuartetMove(category))
+        return tuple(moves)
+
+    def _legal_actions_for(self, actor: int) -> tuple[Move, ...]:
+        state = replace(self, actor=actor)
+        return state.legal_questions() + state.legal_quartets()
+
+    def legal_moves(self) -> tuple[Move, ...]:
+        return self._legal_actions_for(self.actor)
+
+    def stabilize(self, nominal_actor: int | None = None) -> "SearchState":
+        """Resolve derived forced quartets and skip actors with no action."""
+        actor = self.actor if nominal_actor is None else nominal_actor
+        if self.is_terminal:
+            return replace(self, actor=actor)
+        for offset in range(N_PLAYERS):
+            candidate = (actor + offset) % N_PLAYERS
+            if self._legal_actions_for(candidate):
+                return replace(self, actor=candidate)
+        raise SearchInvariantError(
+            "unresolved categories have no legal action for any player"
+        )
+
+    def resolve_forced_quartets(self) -> "SearchState":
+        return self.stabilize(self.actor)
+
+    def apply_question(self, move: QuestionMove) -> "QuestionContext":
+        return self._question_context(move)
+
+    def apply_quartet(self, move: QuartetMove) -> "SearchState":
+        if not isinstance(move, QuartetMove):
+            raise TypeError("expected QuartetMove")
+        if move.category not in range(N_CATEGORIES):
+            raise ValueError("invalid quartet category")
+        if move.category in self.resolved_categories:
+            raise ValueError("category is already resolved")
+        mask = self._mask(
+            lambda deal_id: self._has_quartet(deal_id, move.category, self.actor)
+        )
+        if not mask:
+            raise ValueError("quartet declaration is incompatible with every deal")
+        return replace(self, possible_initial_deals=mask).normalize_overrides().stabilize(
+            self.actor
+        )
     def ask(self, asker: int, target: int, card: int | str) -> "SearchState":
         """Apply a question, including the information in asking it.
 
@@ -116,54 +303,30 @@ class SearchState:
             raise ValueError("question asker is not the current actor")
         if asker == target or asker not in range(N_PLAYERS) or target not in range(N_PLAYERS):
             raise ValueError("invalid question players")
-<<<<<<< HEAD
-=======
         if card_index not in range(TOTAL_CARDS):
             raise ValueError("invalid card")
->>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
-        family_start = card_index - (card_index % CARDS_PER_CATEGORY)
-
-        result = self._filter(
-            lambda deal_id: (
-<<<<<<< HEAD
-                # This follows the committed brute-force referee.  The
-                # modular referee and architecture.md additionally reject a
-                # request for a card the asker already owns; that mismatch is
-                # intentionally left visible during this migration.
-                any(self.current_owner(deal_id, c) == asker
-                    for c in range(family_start, family_start + CARDS_PER_CATEGORY))
-=======
-                any(self.current_owner(deal_id, c) == asker
-                    for c in range(family_start, family_start + CARDS_PER_CATEGORY))
-                and self.current_owner(deal_id, card_index) != asker
->>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
-            )
-        )
-        if not result.possible_initial_deals:
-            raise ValueError("question is incompatible with every deal")
-        return result
+        return self.apply_question(
+            QuestionMove(target, card_index // CARDS_PER_CATEGORY, card_index)
+        ).state
 
     def answer(self, asker: int, target: int, card: int | str, yes: bool) -> "SearchState":
         """Apply an answer and the public YES transfer, if any."""
         card_index = CARD_INDEX[card] if isinstance(card, str) else card
-        result = self._filter(
+        result = self._mask(
             lambda deal_id: (self.current_owner(deal_id, card_index) == target) == yes
         )
-        if not result.possible_initial_deals:
+        if not result:
             raise ValueError("answer is incompatible with every deal")
         if yes:
-            overrides = list(result.current_owner_override)
+            overrides = list(self.current_owner_override)
             overrides[card_index] = asker
-<<<<<<< HEAD
-            return replace(result, current_owner_override=tuple(overrides), actor=asker)
-=======
             return replace(
-                result,
+                self,
+                possible_initial_deals=result,
                 current_owner_override=tuple(overrides),
                 actor=asker,
-            ).normalize_overrides()
->>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
-        return replace(result, actor=target)
+            ).normalize_overrides().stabilize(asker)
+        return replace(self, possible_initial_deals=result, actor=target).stabilize(target)
 
     def replay(self, events: Iterable[object]) -> "SearchState":
         """Replay reference-referee ``Question``/``Answer`` events.
@@ -174,23 +337,27 @@ class SearchState:
         from .referee import Answer, Question
 
         state = self
-        pending = None
+        pending: QuestionContext | None = None
         for event in events:
             if isinstance(event, Question):
                 if pending is not None:
                     raise ValueError("question before previous answer")
-                state = state.ask(event.asker, event.target, event.card)
-                pending = event
+                card = CARD_INDEX[event.card]
+                pending = state.apply_question(
+                    QuestionMove(
+                        event.target,
+                        card // CARDS_PER_CATEGORY,
+                        card,
+                    )
+                )
             elif isinstance(event, Answer):
                 if pending is None:
                     raise ValueError("answer without question")
-                state = state.answer(
-                    pending.asker, pending.target, pending.card, event.value
-                )
+                state = pending.apply_answer(AnswerMove(event.value))
                 pending = None
             else:
                 raise TypeError(f"unknown event type: {type(event)!r}")
-        return state
+        return pending.state if pending is not None else state
 
     @classmethod
     def from_game_state(cls, state, *, actor: int | None = None) -> "SearchState":
@@ -225,16 +392,75 @@ class SearchState:
             if ok:
                 allowed.append(deal.deal_id)
         bitset = sum(1 << deal_id for deal_id in allowed)
-<<<<<<< HEAD
-        return cls(bitset, tuple(overrides),
-                   state.turn - 1 if actor is None else actor)
-=======
         return cls(
             bitset,
             tuple(overrides),
             state.turn - 1 if actor is None else actor,
         ).normalize_overrides()
->>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
 
 
-__all__ = ["NO_OVERRIDE", "SearchState"]
+@dataclass(frozen=True)
+class QuestionContext:
+    """Transient answer node; it is not part of the strategic state."""
+
+    state: SearchState
+    question: QuestionMove
+    yes_mask: int
+    no_mask: int
+
+    @property
+    def D_yes(self) -> int:
+        return self.yes_mask
+
+    @property
+    def D_no(self) -> int:
+        return self.no_mask
+
+    def legal_answers(self) -> tuple[AnswerMove, ...]:
+        answers = []
+        if self.yes_mask:
+            answers.append(YES)
+        if self.no_mask:
+            answers.append(NO)
+        return tuple(answers)
+
+    def legal_answer_moves(self) -> tuple[AnswerMove, ...]:
+        return self.legal_answers()
+
+    def apply_answer(self, answer: AnswerMove) -> SearchState:
+        if not isinstance(answer, AnswerMove):
+            raise TypeError("expected AnswerMove")
+        if answer.yes and not self.yes_mask:
+            raise ValueError("YES is incompatible with every deal")
+        if not answer.yes and not self.no_mask:
+            raise ValueError("NO is incompatible with every deal")
+        if answer.yes:
+            overrides = list(self.state.T)
+            overrides[self.question.card] = self.state.actor
+            return replace(
+                self.state,
+                possible_initial_deals=self.yes_mask,
+                current_owner_override=tuple(overrides),
+                actor=self.state.actor,
+            ).normalize_overrides().stabilize(self.state.actor)
+        return replace(
+            self.state,
+            possible_initial_deals=self.no_mask,
+            actor=self.question.target,
+        ).stabilize(self.question.target)
+
+    def answer(self, answer: AnswerMove) -> SearchState:
+        return self.apply_answer(answer)
+
+
+__all__ = [
+    "AnswerMove",
+    "NO",
+    "NO_OVERRIDE",
+    "QuestionContext",
+    "QuestionMove",
+    "QuartetMove",
+    "SearchInvariantError",
+    "SearchState",
+    "YES",
+]
