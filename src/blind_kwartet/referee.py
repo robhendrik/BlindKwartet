@@ -211,6 +211,11 @@ def question_is_legal(
     ):
         return False
 
+    # A player may ask for another card in a family they hold, but not for a
+    # card they already currently own.
+    if owner_of(state, question.card) == question.asker:
+        return False
+
     return True
 
 

@@ -173,8 +173,8 @@ def test_question_can_reduce_possible_worlds(worlds):
     assert len(after_question) < len(initial)
 
 
-def test_redundant_question_does_not_reduce_worlds(worlds):
-    """Once family ownership is known, another A question may add no information."""
+def test_question_for_owned_card_is_illegal_in_some_worlds(worlds):
+    """Question legality includes not already owning the requested card."""
 
     before = [
         Question(asker=0, target=1, card="A1"),
@@ -188,4 +188,4 @@ def test_redundant_question_does_not_reduce_worlds(worlds):
     state_before = state(worlds, before)
     state_after = state(worlds, after)
 
-    assert state_before == state_after
+    assert state_after < state_before

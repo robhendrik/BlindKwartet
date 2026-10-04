@@ -1,5 +1,9 @@
 """Milestone 1 exact-deal and SearchState regression tests."""
 
+from dataclasses import replace
+
+import pytest
+
 from blind_kwartet.deals import INITIAL_DEALS, INITIAL_OWNER_MASKS
 from blind_kwartet.referee import (
     Answer,
@@ -31,7 +35,7 @@ def test_owner_lookup_uses_d_then_t():
     initial_owner = state.current_owner(deal_id, "A1")
     transferred = state.answer(0, initial_owner, "A1", True)
     assert transferred.current_owner(deal_id, "A1") == 0
-    assert transferred.T[0] == 0
+    assert transferred.T[0] == NO_OVERRIDE
 
 
 def test_yes_updates_t_and_no_does_not():
@@ -59,9 +63,31 @@ def test_card_can_be_transferred_back():
         Question(1, 0, "A1"), Answer(True),
     ]
     state = SearchState.initial().replay(events)
-    assert state.T[0] == 1
+    # The second transfer returns A1 to its surviving initial owner, so the
+    # public override is redundant and is normalized away.
+    assert state.T[0] == NO_OVERRIDE
     assert state.actor == 1
     assert state.D
+
+
+def test_cannot_ask_for_card_already_owned_by_asker():
+    state = SearchState.initial()._filter(
+        lambda deal_id: SearchState.initial().current_owner(deal_id, "A1") == 0
+    )
+    with pytest.raises(ValueError):
+        state.ask(0, 1, "A1")
+
+
+def test_yes_normalizes_override_implied_by_d():
+    # Model a previous transfer: D says the initial owner is P1, while T
+    # says the card currently belongs to P2.  A YES transfer back to P1 then
+    # makes the override redundant.
+    state = SearchState.initial()._filter(
+        lambda deal_id: SearchState.initial().current_owner(deal_id, "A1") == 0
+    )
+    state = replace(state, current_owner_override=(1,) + state.T[1:])
+    transferred = state.answer(0, 1, "A1", True)
+    assert transferred.T[0] == NO_OVERRIDE
 
 
 def test_scripted_replay_matches_reference_after_every_event():
