@@ -269,3 +269,31 @@ or minimax.
   quartet resolutions as separate events, so the script derives them from
   resolved-category differences after stable transitions. It does not invent
   separate history records for them.
+
+## Breadth-First State-Space Exploration
+
+- Added `scripts/explore_breadth.py`, which explores stable
+  `SearchState(D,T,actor)` nodes using complete question-plus-answer branches
+  and quartet declarations. It supports `--max-depth`, `--dedup raw`,
+  `--dedup canonical`, and `--show-nodes` without adding engine or solver
+  behavior.
+- Added `tests/test_explore_breadth.py` and `scripts/__init__.py` for focused
+  deterministic/dedup coverage and script loading.
+- Completed raw depth-1 example:
+
+  ```text
+  depth frontier newly cumulative terminal raw_edges branching
+      0        1     48       49       0       48      48.00
+      1       48      0       49       0        0       0.00
+  ```
+
+  The 48 depth-1 successors were all unique raw states; each had `|D|=9032`
+  and mean legal-action count 23.50. A canonical depth-0 smoke run retained
+  1 state, equal to raw mode. The raw depth-3 command was attempted and
+  reached the depth-1 report with 2,076 newly retained states and 2,184 raw
+  edges before being stopped while expanding the next generation; exact pure
+  transition filtering is currently too slow for a practical depth-3 run.
+- Final full result after this addition: `68 passed in 157.91s (0:02:37)`.
+- Canonical dedup remains available and reports raw successors separately from
+  canonical retained states, but depth-2 exploration was not run because the
+  existing exhaustive canonicalizer is intentionally expensive per node.
