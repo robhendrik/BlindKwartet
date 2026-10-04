@@ -1,35 +1,34 @@
-# Milestone 1 Handoff
+# Milestone 1.5 Handoff
 
 ## Current Status
 
-The branch already contained a Milestone 1 implementation in committed files
-`deals.py`, `search_state.py`, and `tests/test_search_state.py`. It enumerates
-the exact default-game initial-deal universe, represents `(D, T, actor)`, and
-provides replay and an adapter from the existing factorized referee.
+Milestone 1 was already present and passing. `rules.md`, `architecture.md`,
+and this handoff were read completely before implementation. The pure
+search-facing rule/action layer is now implemented over `(D, T, actor)`.
 
-The requested `rules.md` was not present in the repository or its parent
-workspace, so it could not be read. `architecture.md` was read and used as the
-authoritative structural reference. The worktree also contained a pre-existing
-unrelated edit to `.codex/config.toml`; it was left untouched.
+The existing referee and live engine remain in place. No player, orchestration,
+solver, canonicalization, tournament, or LLM work was added.
 
 ## Files Added or Changed
 
 - `src/blind_kwartet/deals.py`: existing Milestone 1 module. Enumerates the
   34,032 legal labelled initial deals and builds stable deal IDs and owner
   masks.
-- `src/blind_kwartet/search_state.py`: existing exact `(D, T, actor)` state,
-  current-owner lookup, question/answer filtering, YES transfers, actor
-  changes, replay, and old-state adapter. Fixed question legality to reject a
-  requested card already owned by the asker, added card/deal validation, and
-  normalized redundant public overrides after YES and adapter conversion.
-- `src/blind_kwartet/referee.py`: added the same requested-card legality rule
-  to keep the old brute-force comparison referee aligned with the architecture.
-- `tests/test_search_state.py`: existing Milestone 1 coverage extended for
-  owned-card rejection and `T` normalization; the transfer-back expectation
-  now reflects normalized `T`.
-- `tests/test_referee.py`: updated one stale expectation to reflect the
-  architecture-consistent legality rule; the old referee remains present.
-- `codex_handoff.md`: this handoff.
+- `src/blind_kwartet/search_state.py`: added typed legal-question generation,
+  transient answer contexts, YES/NO branch masks, quartet declarations,
+  derived forced-quartet resolution, silence filtering, actor skipping,
+  terminal scores, and invariant detection. Existing replay, adapter,
+  normalization, and compatibility helpers remain.
+- `src/blind_kwartet/moves.py`: new `QuestionMove`, `AnswerMove`, `YES`,
+  `NO`, and `QuartetMove` types for pure search actions.
+- `src/blind_kwartet/exceptions.py`: added `SearchInvariantError` for an
+  unresolved state with no legal action.
+- `tests/test_search_actions.py`: focused Milestone 1.5 tests for legal
+  questions, strategic/forced answers, quartets, silence-related legality,
+  terminal ties, actor skipping, invariant failure, and monotone `D`.
+- `tests/test_search_state.py`: cleaned committed conflict markers while
+  preserving the Milestone 1 regression coverage.
+- `codex_handoff.md`: updated handoff.
 
 ## Implemented Behavior
 
@@ -50,6 +49,20 @@ unrelated edit to `.codex/config.toml`; it was left untouched.
 - `from_game_state` adapts the existing factorized referee without deleting or
   replacing it, and rejects non-public per-card current ownership.
 - Redundant `T` overrides are normalized away when `D` already implies them.
+- Typed `QuestionMove`, `AnswerMove`/`YES`/`NO`, and `QuartetMove` actions are
+  supported without putting pending-question context into `SearchState`.
+- `legal_questions()` generates only actor-valid, unresolved-category,
+  world-compatible questions and applies silence-as-information filtering.
+- `QuestionContext` exposes `D_yes`, `D_no`, and exactly the currently legal
+  strategic answer branches.
+- YES/NO transitions apply transfer, actor progression, forced-quartet
+  derivation, and cyclic actor skipping before returning a stable state.
+- Voluntary quartet declarations filter `D`; impossible declarations fail.
+- Resolved categories, forced quartets, quartet holders, scores, and terminal
+  status are derived from current worlds represented by `D` and `T`.
+- Unresolved states with no legal action for any player raise
+  `SearchInvariantError`; terminal states can have equal scores, including
+  `(1, 1, 1)`.
 
 No SearchPlayer, minimax/Max-N, tournament logic, canonicalization,
 transposition tables, or LLM player was added.
@@ -58,9 +71,9 @@ transposition tables, or LLM player was added.
 
 - Existing deal-universe, owner lookup, monotonicity, transfer-back, replay,
   old-referee, modular-referee, and engine tests remain relevant.
-- Added regression coverage for owned-card question rejection and normalized
-  YES transfers.
-- Final full result: `34 passed in 10.10s` (`python -m pytest -q`).
+- Added focused action-layer coverage plus the existing Milestone 1 and old
+  referee regression tests.
+- Final full result: `44 passed in 11.65s` (`python -m pytest -q`).
 
 ## Architecture / Rules Check
 
@@ -72,26 +85,29 @@ transposition tables, or LLM player was added.
   probability or hidden deal is introduced.
 - YES keeps the asker’s turn and NO passes to the target.
 - `T` normalization now follows the architecture requirement.
-- `rules.md` is missing, which is an unresolved repository discrepancy. The
-  supplied rules in the task and `architecture.md` were used instead.
-- Quartet declaration/forced-resolution behavior belongs to the existing live
-  referee layer; the new `SearchState` does not yet expose quartet moves or a
-  stable completed-category representation. This was left unchanged because
-  quartet search was outside the requested Milestone 1 implementation scope.
+- `rules.md` is present and agrees with the implemented semantics: no hidden
+  deal, monotone `D`, public non-monotone transfers, silence, strategic
+  answers, immediate forced quartets, turn retention/passing, cyclic skipping,
+  and genuine ties.
+- `architecture.md` requires history-free `(D,T,actor)` search state. Quartet
+  resolution is derived from current ownership; no quartet history or score
+  field was added.
+- The pending question is represented only by transient `QuestionContext`, as
+  allowed by the architecture’s search API.
+- Existing legacy conflict markers in the Milestone 1 search test/state were
+  removed; no unrelated referee or engine refactor was performed.
 
 ## Remaining Questions
 
-- Should the missing `rules.md` be restored to the branch, and should it be
-  reconciled with `architecture.md` if they differ?
-- Should a future search-facing adapter expose quartet actions and forced
-  quartet resolution directly from `(D, T, actor)`?
-- Should the live `GameState` eventually carry an explicit phase/pending
-  question as described by `architecture.md`, or remain on the current
-  pending-question field during migration?
+- The existing old referee’s event model remains separate from the new typed
+  search actions; a future migration can add a direct adapter regression for
+  quartet events.
+- The live `GameState` still uses its existing factorized representation and
+  pending-question field; the requested orchestration refactor is deferred.
 
 ## Recommended Next Step
 
-Add a small search-facing legal-action layer for question, answer, and quartet
-moves over `SearchState`, including invariant failures for unresolved
-categories with no legal action. Leave strategy and optimization for later
-milestones.
+Add pure successor/replay coverage for mixed question, answer, and quartet
+transcripts against the old referee, then proceed to the smallest solver
+preparatory milestone: cycle-safe successor traversal without
+canonicalization or strategic players.
