@@ -37,3 +37,7 @@ Thumbs.db
 data/
 output/
 *.log
+
+# Obsedian
+.obsedian/
+.trash/
