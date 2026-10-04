@@ -1,5 +1,13 @@
 {
     "name": "Blind Quartets",
+
     "image": "mcr.microsoft.com/devcontainers/python:3.12",
-    "postCreateCommand": "pip install -r requirements.txt && pip install -e ."
+
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "lts"
+        }
+    },
+
+    "postCreateCommand": "pip install -r requirements.txt && pip install -e . && npm install -g @openai/codex && codex --version"
 }
