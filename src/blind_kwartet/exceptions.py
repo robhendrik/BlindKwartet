@@ -7,3 +7,7 @@ class IllegalEvent(ValueError):
 
 class SearchInvariantError(AssertionError):
     """Raised when an unresolved search state has no legal continuation."""
+
+
+class IllegalMove(ValueError):
+    """Raised when a player chooses an action outside its supplied view."""

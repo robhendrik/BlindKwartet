@@ -32,6 +32,15 @@ class QuartetMove:
     category: int
 
 
-Move = QuestionMove | QuartetMove
+Action = QuestionMove | AnswerMove | QuartetMove
+Move = Action
 
-__all__ = ["AnswerMove", "Move", "NO", "QuestionMove", "QuartetMove", "YES"]
+__all__ = [
+    "Action",
+    "AnswerMove",
+    "Move",
+    "NO",
+    "QuestionMove",
+    "QuartetMove",
+    "YES",
+]
