@@ -62,6 +62,13 @@ class SearchState:
 
     def current_owner(self, deal_id: int, card: int | str) -> int:
         card_index = CARD_INDEX[card] if isinstance(card, str) else card
+<<<<<<< HEAD
+=======
+        if card_index not in range(TOTAL_CARDS):
+            raise ValueError("invalid card")
+        if deal_id not in range(len(INITIAL_DEALS)):
+            raise ValueError("invalid deal id")
+>>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
         override = self.current_owner_override[card_index]
         return (override if override != NO_OVERRIDE
                 else INITIAL_DEALS[deal_id].owner_by_card[card_index])
@@ -78,6 +85,26 @@ class SearchState:
         )
         return replace(self, possible_initial_deals=bitset)
 
+<<<<<<< HEAD
+=======
+    def normalize_overrides(self) -> "SearchState":
+        """Remove overrides already implied by every surviving deal."""
+        if not self.possible_initial_deals:
+            raise ValueError("cannot normalize an empty information state")
+
+        overrides = list(self.current_owner_override)
+        for card in range(TOTAL_CARDS):
+            override = overrides[card]
+            if override == NO_OVERRIDE:
+                continue
+            if all(
+                INITIAL_DEALS[deal_id].owner_by_card[card] == override
+                for deal_id in self.surviving_deal_ids()
+            ):
+                overrides[card] = NO_OVERRIDE
+        return replace(self, current_owner_override=tuple(overrides))
+
+>>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
     def ask(self, asker: int, target: int, card: int | str) -> "SearchState":
         """Apply a question, including the information in asking it.
 
@@ -89,16 +116,27 @@ class SearchState:
             raise ValueError("question asker is not the current actor")
         if asker == target or asker not in range(N_PLAYERS) or target not in range(N_PLAYERS):
             raise ValueError("invalid question players")
+<<<<<<< HEAD
+=======
+        if card_index not in range(TOTAL_CARDS):
+            raise ValueError("invalid card")
+>>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
         family_start = card_index - (card_index % CARDS_PER_CATEGORY)
 
         result = self._filter(
             lambda deal_id: (
+<<<<<<< HEAD
                 # This follows the committed brute-force referee.  The
                 # modular referee and architecture.md additionally reject a
                 # request for a card the asker already owns; that mismatch is
                 # intentionally left visible during this migration.
                 any(self.current_owner(deal_id, c) == asker
                     for c in range(family_start, family_start + CARDS_PER_CATEGORY))
+=======
+                any(self.current_owner(deal_id, c) == asker
+                    for c in range(family_start, family_start + CARDS_PER_CATEGORY))
+                and self.current_owner(deal_id, card_index) != asker
+>>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
             )
         )
         if not result.possible_initial_deals:
@@ -116,7 +154,15 @@ class SearchState:
         if yes:
             overrides = list(result.current_owner_override)
             overrides[card_index] = asker
+<<<<<<< HEAD
             return replace(result, current_owner_override=tuple(overrides), actor=asker)
+=======
+            return replace(
+                result,
+                current_owner_override=tuple(overrides),
+                actor=asker,
+            ).normalize_overrides()
+>>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
         return replace(result, actor=target)
 
     def replay(self, events: Iterable[object]) -> "SearchState":
@@ -179,8 +225,16 @@ class SearchState:
             if ok:
                 allowed.append(deal.deal_id)
         bitset = sum(1 << deal_id for deal_id in allowed)
+<<<<<<< HEAD
         return cls(bitset, tuple(overrides),
                    state.turn - 1 if actor is None else actor)
+=======
+        return cls(
+            bitset,
+            tuple(overrides),
+            state.turn - 1 if actor is None else actor,
+        ).normalize_overrides()
+>>>>>>> 4b78765eccd36c34aecb1a0b3ece8cc63c14876e
 
 
 __all__ = ["NO_OVERRIDE", "SearchState"]
