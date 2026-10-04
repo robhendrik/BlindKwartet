@@ -167,5 +167,21 @@
     }
   },
   "active": "29df2a000c1d8a89",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "src/blind_kwartet/quartet_referee.py",
+    "src/blind_kwartet/state.py",
+    "src/blind_kwartet/answer_referee.py",
+    "src/blind_kwartet/exceptions.py",
+    "src/blind_kwartet/turn_referee.py",
+    "src/blind_kwartet/engine.py",
+    "src/blind_kwartet/search_state.py",
+    "src/blind_kwartet/question_referee.py",
+    "src/blind_kwartet/__init__.py",
+    "src/blind_kwartet/count_constraint.py",
+    "src/blind_kwartet/events.py",
+    "rules.md",
+    "readme.md",
+    "codex_handoff.md",
+    "architecture.md"
+  ]
 }
