@@ -1,0 +1,171 @@
+{
+  "main": {
+    "id": "c0bd652d429277a0",
+    "type": "split",
+    "children": [
+      {
+        "id": "39d195827e61d049",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "29df2a000c1d8a89",
+            "type": "leaf",
+            "state": {
+              "type": "empty",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "Nieuw tabblad"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "eb0d2de95693ca30",
+    "type": "mobile-drawer",
+    "children": [
+      {
+        "id": "3f95a9925700ce6a",
+        "type": "leaf",
+        "state": {
+          "type": "file-explorer",
+          "state": {
+            "sortOrder": "alphabetical",
+            "autoReveal": false,
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-folder-closed",
+          "title": "Verkenner"
+        }
+      },
+      {
+        "id": "c46cffc348478cc9",
+        "type": "leaf",
+        "state": {
+          "type": "search",
+          "state": {
+            "query": "",
+            "matchingCase": false,
+            "explainSearch": false,
+            "collapseAll": false,
+            "extraContext": false,
+            "sortOrder": "alphabetical"
+          },
+          "icon": "lucide-search",
+          "title": "Zoeken"
+        }
+      },
+      {
+        "id": "77f164b3b94f5da7",
+        "type": "leaf",
+        "state": {
+          "type": "tag",
+          "state": {
+            "sortOrder": "frequency",
+            "useHierarchy": true,
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-tags",
+          "title": "Labels"
+        }
+      },
+      {
+        "id": "cc0821782596d808",
+        "type": "leaf",
+        "state": {
+          "type": "all-properties",
+          "state": {
+            "sortOrder": "frequency",
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-archive",
+          "title": "Alle eigenschappen"
+        }
+      },
+      {
+        "id": "911cfa3e1ddddda1",
+        "type": "leaf",
+        "state": {
+          "type": "bookmarks",
+          "state": {
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-bookmark",
+          "title": "Bladwijzers"
+        }
+      }
+    ],
+    "currentTab": 0
+  },
+  "right": {
+    "id": "ca7f07d665396f45",
+    "type": "mobile-drawer",
+    "children": [
+      {
+        "id": "18a0323e45a24e14",
+        "type": "leaf",
+        "state": {
+          "type": "backlink",
+          "state": {
+            "collapseAll": false,
+            "extraContext": false,
+            "sortOrder": "alphabetical",
+            "showSearch": false,
+            "searchQuery": "",
+            "backlinkCollapsed": false,
+            "unlinkedCollapsed": true
+          },
+          "icon": "links-coming-in",
+          "title": "Terugverwijzing"
+        }
+      },
+      {
+        "id": "862b0d310a346b44",
+        "type": "leaf",
+        "state": {
+          "type": "outgoing-link",
+          "state": {
+            "linksCollapsed": false,
+            "unlinkedCollapsed": true
+          },
+          "icon": "links-going-out",
+          "title": "Uitgaande verwijzingen"
+        }
+      },
+      {
+        "id": "05b8ad42d616a846",
+        "type": "leaf",
+        "state": {
+          "type": "outline",
+          "state": {
+            "followCursor": false,
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-list",
+          "title": "Overzicht"
+        }
+      }
+    ],
+    "currentTab": 0
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open snel wisselen": false,
+      "graph:Open grafiek weergave": false,
+      "canvas:Nieuw doek aanmaken": false,
+      "daily-notes:Open de notitie van vandaag": false,
+      "templates:Sjabloon invoegen": false,
+      "command-palette:Open opdrachtenpaneel": false,
+      "bases:Nieuwe basis maken": false
+    }
+  },
+  "active": "29df2a000c1d8a89",
+  "lastOpenFiles": []
+}
