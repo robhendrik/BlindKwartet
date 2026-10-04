@@ -8,6 +8,7 @@ information state, not a complete measure of strategic uncertainty.
 from __future__ import annotations
 
 from math import log2
+import os
 
 from blind_kwartet.deals import CARDS, ALL_DEAL_IDS_MASK
 from blind_kwartet.game import Game
