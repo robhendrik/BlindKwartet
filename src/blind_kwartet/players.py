@@ -157,7 +157,7 @@ class SingleCategoryTreePlayer(Player):
             # The game currently supplies answer actions only to the target;
             # keep this player total without pretending the local ask solver
             # can evaluate a pending global question.
-            choice = min(answers, key=lambda move: not move.yes)
+            choice = min(answers, key=lambda move: move.yes)
             record("answer")
             return choice
 
