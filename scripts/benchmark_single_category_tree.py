@@ -137,7 +137,11 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500, global_depth: 
             diagnostic_indices[seat] += 1
             question_decisions[seat] += 1
             assert diagnostic.action_kind == "question"
-            label = diagnostic.selected_outcome.name
+            label = (
+                diagnostic.selected_outcome.name
+                if diagnostic.selected_outcome is not None
+                else "GLOBAL"
+            )
             outcomes[seat][label] += 1
             if diagnostic.evaluated_win and first_win[seat] is None:
                 first_win[seat] = event_number
@@ -447,6 +451,7 @@ def print_all_tree_observation(
             f"P{seat + 1}: questions={observation.question_decisions[seat]} "
             f"strategic_answers={observation.strategic_answer_decisions[seat]} "
             f"WIN={outcomes['WIN']} OPEN={outcomes['OPEN']} LOSS={outcomes['LOSS']} "
+            f"GLOBAL={outcomes['GLOBAL']} "
             f"first_WIN_event={observation.first_win_event[seat]} "
             f"category_switches={observation.category_switches[seat]} "
             f"solver_nodes={player.solver_nodes} memo_hits={player.solver_memo_hits} "
