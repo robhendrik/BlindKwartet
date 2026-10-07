@@ -121,11 +121,11 @@ def test_non_first_category_uses_local_card_numbers(monkeypatch):
     )
 
 
-def test_answer_views_remain_total_and_choose_yes_first():
+def test_answer_views_remain_total_and_choose_no_first():
     player = SingleCategoryTreePlayer()
     state = SearchState.initial()
     answers = (AnswerMove(False), AnswerMove(True))
-    assert player.play(PlayerView(1, state, answers)) == AnswerMove(True)
+    assert player.play(PlayerView(1, state, answers)) == AnswerMove(False)
 
 
 def test_broad_entry_state_selects_deterministic_legal_loss():

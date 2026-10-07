@@ -16,6 +16,8 @@ from statistics import mean
 from typing import Iterable
 
 from blind_kwartet.game import Game
+from blind_kwartet.history import AnswerEvent, QuartetEvent, QuestionEvent
+from blind_kwartet.moves import AnswerMove, QuestionMove, QuartetMove
 from blind_kwartet.players import (
     RandomPlayer,
     SingleCategoryTreePlayer,
@@ -23,6 +25,7 @@ from blind_kwartet.players import (
 )
 from blind_kwartet.result import GameResult
 from blind_kwartet.single_category_solver import CategoryOutcome
+from blind_kwartet.search_state import SearchState
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,107 @@ class GameObservation:
     @property
     def event_limit_reached(self) -> bool:
         return self.end_reason == "event_limit"
+
+
+@dataclass(frozen=True)
+class AllTreeObservation:
+    """Diagnostics for one complete (or event-limited) all-tree game."""
+
+    result: GameResult
+    players: tuple[SingleCategoryTreePlayer, ...]
+    question_decisions: tuple[int, ...]
+    strategic_answer_decisions: tuple[int, ...]
+    selected_outcomes: tuple[Counter, ...]
+    first_win_event: tuple[int | None, ...]
+    category_switches: tuple[int, ...]
+    repeated_search_states: int
+    distinct_search_states: int
+    final_deal_count: int
+    first_singleton_event: int | None
+
+    @property
+    def event_limit_reached(self) -> bool:
+        return self.result.end_reason == "event_limit"
+
+
+def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObservation:
+    """Run one game with three identical deterministic tree strategies."""
+    players = tuple(SingleCategoryTreePlayer() for _ in range(3))
+    result = Game(players, first_player=0, seed=seed, max_events=event_limit).run()
+
+    # Replay the public history to inspect the exact strategic states.  The
+    # transient state between QuestionEvent and AnswerEvent is intentionally
+    # not counted: it is not a SearchState in the game model.
+    state = SearchState.initial(0).resolve_forced_quartets()
+    states = [state]
+    pending = None
+    pending_has_strategic_answer = False
+    question_decisions = [0, 0, 0]
+    strategic_answers = [0, 0, 0]
+    outcomes = [Counter() for _ in range(3)]
+    first_win = [None, None, None]
+    switches = [0, 0, 0]
+    last_category = [None, None, None]
+    diagnostic_indices = [0, 0, 0]
+
+    for event_number, event in enumerate(result.history, start=1):
+        if isinstance(event, QuestionEvent):
+            pending = state.apply_question(QuestionMove(event.target, event.category, event.card))
+            seat = event.asker
+            diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
+            diagnostic_indices[seat] += 1
+            question_decisions[seat] += 1
+            assert diagnostic.action_kind == "question"
+            label = diagnostic.selected_outcome.name
+            outcomes[seat][label] += 1
+            if diagnostic.evaluated_win and first_win[seat] is None:
+                first_win[seat] = event_number
+            if last_category[seat] is not None and last_category[seat] != event.category:
+                switches[seat] += 1
+            last_category[seat] = event.category
+            pending_has_strategic_answer = len(pending.legal_answers()) == 2
+            if pending_has_strategic_answer:
+                strategic_answers[event.target] += 1
+        elif isinstance(event, AnswerEvent):
+            assert pending is not None
+            state = pending.apply_answer(AnswerMove(event.yes))
+            if pending_has_strategic_answer:
+                seat = event.target
+                diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
+                diagnostic_indices[seat] += 1
+                assert diagnostic.action_kind == "answer"
+            pending = None
+            pending_has_strategic_answer = False
+            states.append(state)
+        elif isinstance(event, QuartetEvent):
+            state = state.apply_quartet(QuartetMove(event.category))
+            seat = event.player
+            diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
+            diagnostic_indices[seat] += 1
+            assert diagnostic.action_kind == "quartet"
+            states.append(state)
+        else:
+            raise TypeError(event)
+
+    counts = Counter(states)
+    repeated = sum(count - 1 for count in counts.values() if count > 1)
+    singleton_event = next(
+        (index for index, item in enumerate(states[1:], start=1) if item.D.bit_count() == 1),
+        None,
+    )
+    return AllTreeObservation(
+        result=result,
+        players=players,
+        question_decisions=tuple(question_decisions),
+        strategic_answer_decisions=tuple(strategic_answers),
+        selected_outcomes=tuple(outcomes),
+        first_win_event=tuple(first_win),
+        category_switches=tuple(switches),
+        repeated_search_states=repeated,
+        distinct_search_states=len(counts),
+        final_deal_count=state.D.bit_count(),
+        first_singleton_event=singleton_event,
+    )
 
 
 def observe_game(
@@ -227,15 +331,75 @@ def run_benchmark(games: int, seed: int, event_limit: int) -> None:
     _decision_summary(tree_observations)
 
 
+def _event_text(event: object) -> str:
+    if isinstance(event, QuestionEvent):
+        return f"QUESTION P{event.asker + 1}->P{event.target + 1} C{event.category + 1} card={event.card}"
+    if isinstance(event, AnswerEvent):
+        return f"ANSWER P{event.target + 1} {'YES' if event.yes else 'NO'} C{event.category + 1} card={event.card}"
+    if isinstance(event, QuartetEvent):
+        return f"QUARTET P{event.player + 1} C{event.category + 1}"
+    return repr(event)
+
+
+def print_all_tree_observation(observation: AllTreeObservation, *, verbose: bool = False) -> None:
+    result = observation.result
+    print("All-tree game")
+    print(f"scores={result.seat_scores} winners={tuple(seat + 1 for seat in result.winner_seats)}")
+    print(f"events={result.n_events} end_reason={result.end_reason} event_limit_hit={observation.event_limit_reached}")
+    for seat, player in enumerate(observation.players):
+        outcomes = observation.selected_outcomes[seat]
+        print(
+            f"P{seat + 1}: questions={observation.question_decisions[seat]} "
+            f"strategic_answers={observation.strategic_answer_decisions[seat]} "
+            f"WIN={outcomes['WIN']} OPEN={outcomes['OPEN']} LOSS={outcomes['LOSS']} "
+            f"first_WIN_event={observation.first_win_event[seat]} "
+            f"category_switches={observation.category_switches[seat]} "
+            f"solver_nodes={player.solver_nodes} memo_hits={player.solver_memo_hits} "
+            f"cycle_hits={player.solver_cycle_hits}"
+        )
+    print(
+        f"repeated_exact_SearchStates={observation.repeated_search_states} "
+        f"distinct_SearchStates={observation.distinct_search_states} "
+        f"final_|D|={observation.final_deal_count} "
+        f"first_|D|=1_event={observation.first_singleton_event}"
+    )
+    if verbose:
+        print("Transcript")
+        for event_number, event in enumerate(result.history, start=1):
+            print(f"{event_number:3d}: {_event_text(event)}")
+
+
+def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool) -> None:
+    observations = [
+        run_all_tree_game(seed=seed, event_limit=event_limit)
+        for _ in range(repeat)
+    ]
+    for index, observation in enumerate(observations, start=1):
+        print(f"\nRun {index}/{repeat}")
+        print_all_tree_observation(observation, verbose=verbose)
+    trajectories = [
+        (observation.result.seat_scores, observation.result.winner_seats,
+         observation.result.end_reason, observation.result.history)
+        for observation in observations
+    ]
+    print(f"repeated_runs_identical={len(set(trajectories)) == 1}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--games", type=int, default=100)
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--event-limit", type=int, default=500)
+    parser.add_argument("--all-tree", action="store_true", help="run three identical tree players")
+    parser.add_argument("--repeat", type=int, default=3, help="repeat the identical all-tree setup")
+    parser.add_argument("--verbose", action="store_true", help="print the full all-tree transcript")
     args = parser.parse_args()
-    if args.games <= 0 or args.event_limit < 0:
-        parser.error("--games must be positive and --event-limit must be non-negative")
-    run_benchmark(args.games, args.seed, args.event_limit)
+    if args.games <= 0 or args.event_limit < 0 or args.repeat <= 0:
+        parser.error("--games/--repeat must be positive and --event-limit must be non-negative")
+    if args.all_tree:
+        run_all_tree(seed=args.seed, event_limit=args.event_limit, repeat=args.repeat, verbose=args.verbose)
+    else:
+        run_benchmark(args.games, args.seed, args.event_limit)
 
 
 if __name__ == "__main__":
