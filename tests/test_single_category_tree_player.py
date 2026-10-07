@@ -1,4 +1,5 @@
 from blind_kwartet.game import Game
+from blind_kwartet.history import QuestionEvent
 from blind_kwartet.moves import AnswerMove, QuestionMove, QuartetMove, YES
 from blind_kwartet.players import (
     Player,
@@ -123,9 +124,111 @@ def test_non_first_category_uses_local_card_numbers(monkeypatch):
 
 def test_answer_views_remain_total_and_choose_no_first():
     player = SingleCategoryTreePlayer()
-    state = SearchState.initial()
+    state = SearchState.initial().apply_question(
+        QuestionMove(target=1, category=0, card=0)
+    ).state
     answers = (AnswerMove(False), AnswerMove(True))
-    assert player.play(PlayerView(1, state, answers)) == AnswerMove(False)
+    view = PlayerView(
+        1,
+        state,
+        answers,
+        history=(QuestionEvent(0, 1, 0, 0),),
+    )
+    player._evaluate_answer_branch = lambda *_args: CategoryOutcome.OPEN
+    assert player.play(view) == AnswerMove(False)
+
+
+def test_forced_yes_answer_is_returned_without_branch_comparison():
+    player = SingleCategoryTreePlayer()
+    state = SearchState.initial().apply_question(
+        QuestionMove(target=1, category=0, card=0)
+    ).state
+    view = PlayerView(
+        1,
+        state,
+        (AnswerMove(True),),
+        history=(QuestionEvent(0, 1, 0, 0),),
+    )
+
+    assert player.play(view) == AnswerMove(True)
+    diagnostic = player.decision_diagnostics[-1]
+    assert diagnostic.selected_answer is True
+    assert diagnostic.yes_outcome is None
+    assert diagnostic.no_outcome is None
+
+
+def test_strategic_answer_strictly_prefers_yes(monkeypatch):
+    player = SingleCategoryTreePlayer()
+    state = SearchState.initial().apply_question(
+        QuestionMove(target=1, category=0, card=0)
+    ).state
+    view = PlayerView(1, state, (AnswerMove(False), AnswerMove(True)), history=(QuestionEvent(0, 1, 0, 0),))
+    outcomes = iter((CategoryOutcome.WIN, CategoryOutcome.LOSS))
+    monkeypatch.setattr(player, "_evaluate_answer_branch", lambda *_args: next(outcomes))
+
+    assert player.play(view) == AnswerMove(True)
+    diagnostic = player.decision_diagnostics[-1]
+    assert diagnostic.yes_outcome is CategoryOutcome.WIN
+    assert diagnostic.no_outcome is CategoryOutcome.LOSS
+    assert diagnostic.answer_selection_reason == "strict"
+
+
+def test_strategic_answer_strictly_prefers_no(monkeypatch):
+    player = SingleCategoryTreePlayer()
+    state = SearchState.initial().apply_question(
+        QuestionMove(target=1, category=0, card=0)
+    ).state
+    view = PlayerView(1, state, (AnswerMove(False), AnswerMove(True)), history=(QuestionEvent(0, 1, 0, 0),))
+    outcomes = iter((CategoryOutcome.LOSS, CategoryOutcome.WIN))
+    monkeypatch.setattr(player, "_evaluate_answer_branch", lambda *_args: next(outcomes))
+
+    assert player.play(view) == AnswerMove(False)
+    assert player.decision_diagnostics[-1].answer_selection_reason == "strict"
+
+
+def test_strategic_answer_tie_preserves_no(monkeypatch):
+    for outcome in CategoryOutcome:
+        player = SingleCategoryTreePlayer()
+        state = SearchState.initial().apply_question(
+            QuestionMove(target=1, category=0, card=0)
+        ).state
+        view = PlayerView(1, state, (AnswerMove(False), AnswerMove(True)), history=(QuestionEvent(0, 1, 0, 0),))
+        monkeypatch.setattr(player, "_evaluate_answer_branch", lambda *_args, outcome=outcome: outcome)
+
+        assert player.play(view) == AnswerMove(False)
+        diagnostic = player.decision_diagnostics[-1]
+        assert diagnostic.yes_outcome is outcome
+        assert diagnostic.no_outcome is outcome
+        assert diagnostic.selected_answer is False
+        assert diagnostic.answer_selection_reason == "tie"
+
+
+def test_answer_evaluation_uses_answerer_perspective_and_post_answer_state(monkeypatch):
+    player = SingleCategoryTreePlayer()
+    state = SearchState.initial().apply_question(
+        QuestionMove(target=1, category=0, card=0)
+    ).state
+    view = PlayerView(1, state, (AnswerMove(False), AnswerMove(True)), history=(QuestionEvent(0, 1, 0, 0),))
+    projections = []
+    actors = []
+
+    def capture_projection(resulting_state, category, active_player):
+        projections.append((resulting_state, category, active_player))
+        return 0
+
+    monkeypatch.setattr("blind_kwartet.players.project_category_bitmap", capture_projection)
+    monkeypatch.setattr(
+        player.solver,
+        "solve",
+        lambda bitmap, actor: actors.append((bitmap, actor)) or CategoryResult(CategoryOutcome.OPEN),
+    )
+
+    player.play(view)
+
+    assert [active_player for _, _, active_player in projections] == [1, 1]
+    assert [actor for _, actor in actors] == [2, 0]
+    assert projections[0][0].T[0] == 0
+    assert projections[1][0].T[0] == -1
 
 
 def test_broad_entry_state_selects_deterministic_legal_loss():

@@ -82,6 +82,7 @@ class AllTreeObservation:
     final_deal_count: int
     first_singleton_event: int | None
     state_graph: StateGraph
+    answer_diagnostics: tuple[tuple[int, TreeDecisionDiagnostic], ...] = ()
 
     @property
     def event_limit_reached(self) -> bool:
@@ -107,6 +108,7 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObse
     switches = [0, 0, 0]
     last_category = [None, None, None]
     diagnostic_indices = [0, 0, 0]
+    answer_diagnostics: list[tuple[int, TreeDecisionDiagnostic]] = []
     graph_states = [state]
     graph_ids = {state: 0}
     graph_trajectory = [0]
@@ -163,6 +165,7 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObse
                 diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
                 diagnostic_indices[seat] += 1
                 assert diagnostic.action_kind == "answer"
+                answer_diagnostics.append((event_number, diagnostic))
             pending = None
             pending_question = None
             pending_has_strategic_answer = False
@@ -227,6 +230,7 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObse
         final_deal_count=state.D.bit_count(),
         first_singleton_event=singleton_event,
         state_graph=state_graph,
+        answer_diagnostics=tuple(answer_diagnostics),
     )
 
 
@@ -427,7 +431,12 @@ def _event_text(event: object) -> str:
     return repr(event)
 
 
-def print_all_tree_observation(observation: AllTreeObservation, *, verbose: bool = False) -> None:
+def print_all_tree_observation(
+    observation: AllTreeObservation,
+    *,
+    verbose: bool = False,
+    answer_diagnostics: bool = False,
+) -> None:
     result = observation.result
     print("All-tree game")
     print(f"scores={result.seat_scores} winners={tuple(seat + 1 for seat in result.winner_seats)}")
@@ -459,6 +468,40 @@ def print_all_tree_observation(observation: AllTreeObservation, *, verbose: bool
     print("from   to   count   transition")
     for edge in graph.edges:
         print(f"S{edge.source:<5} S{edge.target:<5} {edge.count:5d}   {edge.transition}")
+    strict_yes = sum(
+        diagnostic.answer_selection_reason == "strict" and diagnostic.selected_answer
+        for _, diagnostic in observation.answer_diagnostics
+    )
+    strict_no = sum(
+        diagnostic.answer_selection_reason == "strict" and not diagnostic.selected_answer
+        for _, diagnostic in observation.answer_diagnostics
+    )
+    ties = sum(
+        diagnostic.answer_selection_reason == "tie"
+        for _, diagnostic in observation.answer_diagnostics
+    )
+    tie_no = sum(
+        diagnostic.answer_selection_reason == "tie" and not diagnostic.selected_answer
+        for _, diagnostic in observation.answer_diagnostics
+    )
+    print(
+        f"strategic_answer_strict_yes={strict_yes} strict_no={strict_no} "
+        f"ties={ties} tie_no={tie_no}"
+    )
+    if answer_diagnostics or verbose:
+        print("Answer diagnostics")
+        for event_number, diagnostic in observation.answer_diagnostics:
+            selected = "YES" if diagnostic.selected_answer else "NO"
+            reason = diagnostic.answer_selection_reason or "forced"
+            print(
+                f"event {event_number}: P{diagnostic.answerer + 1} answers "
+                f"P{diagnostic.answer_asker + 1} "
+                f"{chr(ord('A') + diagnostic.answer_category)}"
+                f"{diagnostic.answer_card - diagnostic.answer_category * 4 + 1} "
+                f"YES={diagnostic.yes_outcome.name if diagnostic.yes_outcome else '-'} "
+                f"NO={diagnostic.no_outcome.name if diagnostic.no_outcome else '-'} "
+                f"-> {selected} ({reason})"
+            )
     if verbose:
         print("Transcript")
         for event_number, event in enumerate(result.history, start=1):
@@ -509,14 +552,18 @@ def write_state_graph(observation: AllTreeObservation, output_stem: str) -> tupl
     return dot_path, image_path
 
 
-def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plot_state_graph: bool, state_graph_output: str) -> None:
+def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plot_state_graph: bool, state_graph_output: str, answer_diagnostics: bool = False) -> None:
     observations = [
         run_all_tree_game(seed=seed, event_limit=event_limit)
         for _ in range(repeat)
     ]
     for index, observation in enumerate(observations, start=1):
         print(f"\nRun {index}/{repeat}")
-        print_all_tree_observation(observation, verbose=verbose)
+        print_all_tree_observation(
+            observation,
+            verbose=verbose,
+            answer_diagnostics=answer_diagnostics,
+        )
         if plot_state_graph and index == 1:
             write_state_graph(observation, state_graph_output)
     trajectories = [
@@ -537,6 +584,7 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true", help="print the full all-tree transcript")
     parser.add_argument("--plot-state-graph", action="store_true", help="write and render the exact all-tree state graph")
     parser.add_argument("--state-graph-output", default="all_tree_cycle", help="DOT output stem")
+    parser.add_argument("--answer-diagnostics", action="store_true", help="print strategic answer branch values")
     args = parser.parse_args()
     if args.games <= 0 or args.event_limit < 0 or args.repeat <= 0:
         parser.error("--games/--repeat must be positive and --event-limit must be non-negative")
@@ -548,6 +596,7 @@ def main() -> None:
             verbose=args.verbose,
             plot_state_graph=args.plot_state_graph,
             state_graph_output=args.state_graph_output,
+            answer_diagnostics=args.answer_diagnostics,
         )
     else:
         run_benchmark(args.games, args.seed, args.event_limit)

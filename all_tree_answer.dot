@@ -1,0 +1,29 @@
+digraph all_tree_state_cycle {
+  rankdir=LR;
+  node [shape=box];
+  S0 [label="S0\\nactor P1 |D|=34032\\nunresolved=3 scores=(0,0,0)"];
+  S1 [label="S1\\nactor P2 |D|=9032\\nunresolved=3 scores=(0,0,0)"];
+  S2 [label="S2\\nactor P1 |D|=1120\\nunresolved=3 scores=(0,0,0)"];
+  S3 [label="S3\\nactor P1 |D|=560\\nunresolved=3 scores=(0,0,0)"];
+  S4 [label="S4\\nactor P1 |D|=560\\nunresolved=3 scores=(0,0,0)"];
+  S5 [label="S5\\nactor P1 |D|=560\\nunresolved=2 scores=(1,0,0)"];
+  S6 [label="S6\\nactor P2 |D|=124\\nunresolved=2 scores=(1,0,0)"];
+  S7 [label="S7\\nactor P1 |D|=12\\nunresolved=2 scores=(1,0,0)"];
+  S8 [label="S8\\nactor P1 |D|=6\\nunresolved=2 scores=(1,0,0)"];
+  S9 [label="S9\\nactor P1 |D|=6\\nunresolved=2 scores=(1,0,0)"];
+  S10 [label="S10\\nactor P1 |D|=6\\nunresolved=1 scores=(2,0,0)"];
+  S11 [label="S11\\nactor P1 |D|=3\\nunresolved=1 scores=(2,0,0)"];
+  S12 [label="S12\\nactor P1 |D|=1\\nunresolved=0 scores=(3,0,0)"];
+  S0 -> S1 [label="P1 asks P2 A1 / NO"];
+  S1 -> S2 [label="P2 asks P1 A2 / NO"];
+  S2 -> S3 [label="P1 asks P2 A3 / YES (P2->P1)"];
+  S3 -> S4 [label="P1 asks P3 A1 / YES (P3->P1)"];
+  S4 -> S5 [label="P1 asks P3 A2 / YES (P3->P1)"];
+  S5 -> S6 [label="P1 asks P2 B1 / NO"];
+  S6 -> S7 [label="P2 asks P1 B2 / NO"];
+  S7 -> S8 [label="P1 asks P2 B3 / YES (P2->P1)"];
+  S8 -> S9 [label="P1 asks P3 B1 / YES (P3->P1)"];
+  S9 -> S10 [label="P1 asks P3 B2 / YES (P3->P1)"];
+  S10 -> S11 [label="P1 asks P2 C1 / YES (P2->P1)"];
+  S11 -> S12 [label="P1 asks P2 C2 / YES (P2->P1)"];
+}

@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 import random
 from dataclasses import dataclass
 
-from .history import GameEvent
+from .history import GameEvent, QuestionEvent
 from .category_projection import project_category_bitmap
 from .deals import CARDS_PER_CATEGORY, N_CATEGORIES
 from .moves import Action, AnswerMove, Move, QuestionMove, QuartetMove
@@ -37,6 +37,14 @@ class TreeDecisionDiagnostic:
     solver_memo_hits: int
     solver_cycle_hits: int
     category_best_values: tuple[tuple[int, CategoryOutcome], ...] = ()
+    answerer: int | None = None
+    answer_category: int | None = None
+    answer_card: int | None = None
+    answer_asker: int | None = None
+    yes_outcome: CategoryOutcome | None = None
+    no_outcome: CategoryOutcome | None = None
+    selected_answer: bool | None = None
+    answer_selection_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -126,6 +134,14 @@ class SingleCategoryTreePlayer(Player):
             evaluated_open: int = 0,
             evaluated_loss: int = 0,
             category_best_values: tuple[tuple[int, CategoryOutcome], ...] = (),
+            answerer: int | None = None,
+            answer_category: int | None = None,
+            answer_card: int | None = None,
+            answer_asker: int | None = None,
+            yes_outcome: CategoryOutcome | None = None,
+            no_outcome: CategoryOutcome | None = None,
+            selected_answer: bool | None = None,
+            answer_selection_reason: str | None = None,
         ) -> None:
             self.decision_diagnostics.append(
                 TreeDecisionDiagnostic(
@@ -143,6 +159,14 @@ class SingleCategoryTreePlayer(Player):
                     solver_memo_hits=self.solver.memo_hits - memo_hits_before,
                     solver_cycle_hits=self.solver.cycle_hits - cycle_hits_before,
                     category_best_values=category_best_values,
+                    answerer=answerer,
+                    answer_category=answer_category,
+                    answer_card=answer_card,
+                    answer_asker=answer_asker,
+                    yes_outcome=yes_outcome,
+                    no_outcome=no_outcome,
+                    selected_answer=selected_answer,
+                    answer_selection_reason=answer_selection_reason,
                 )
             )
 
@@ -154,11 +178,42 @@ class SingleCategoryTreePlayer(Player):
 
         answers = [move for move in legal_moves if isinstance(move, AnswerMove)]
         if answers:
-            # The game currently supplies answer actions only to the target;
-            # keep this player total without pretending the local ask solver
-            # can evaluate a pending global question.
             choice = min(answers, key=lambda move: move.yes)
-            record("answer")
+            question = self._pending_question(view)
+            answer_asker = view.history[-1].asker
+            if len(answers) == 2:
+                context = view.state.apply_question(question)
+                yes_result = self._evaluate_answer_branch(
+                    view, question, context, AnswerMove(True)
+                )
+                no_result = self._evaluate_answer_branch(
+                    view, question, context, AnswerMove(False)
+                )
+                if self._outcome_rank(yes_result) > self._outcome_rank(no_result):
+                    choice = AnswerMove(True)
+                    reason = "strict"
+                else:
+                    reason = "tie" if yes_result is no_result else "strict"
+                record(
+                    "answer",
+                    answerer=view.player_id,
+                    answer_category=question.category,
+                    answer_card=question.card,
+                    answer_asker=answer_asker,
+                    yes_outcome=yes_result,
+                    no_outcome=no_result,
+                    selected_answer=choice.yes,
+                    answer_selection_reason=reason,
+                )
+            else:
+                record(
+                    "answer",
+                    answerer=view.player_id,
+                    answer_category=question.category,
+                    answer_card=question.card,
+                    answer_asker=answer_asker,
+                    selected_answer=choice.yes,
+                )
             return choice
 
         asks = [move for move in legal_moves if isinstance(move, QuestionMove)]
@@ -214,6 +269,36 @@ class SingleCategoryTreePlayer(Player):
         local_card = move.card - move.category * CARDS_PER_CATEGORY
         local_move = LocalCategoryMove(local_target, local_card)
         return self.solver.evaluate_move(bitmap, 0, local_move)
+
+    def _evaluate_answer_branch(
+        self,
+        view: PlayerView,
+        question: QuestionMove,
+        context,
+        answer: AnswerMove,
+    ) -> CategoryOutcome:
+        """Evaluate one answer branch from the answerer's perspective."""
+        resulting_state = context.apply_answer(answer).resolve_forced_quartets()
+        bitmap = project_category_bitmap(
+            resulting_state, question.category, view.player_id
+        )
+        local_actor = (resulting_state.actor - view.player_id) % 3
+        return self.solver.solve(bitmap, local_actor).outcome
+
+    @staticmethod
+    def _pending_question(view: PlayerView) -> QuestionMove:
+        if not view.history or not isinstance(view.history[-1], QuestionEvent):
+            raise ValueError("strategic answer evaluation requires a pending question")
+        event = view.history[-1]
+        return QuestionMove(event.target, event.category, event.card)
+
+    @staticmethod
+    def _outcome_rank(outcome: CategoryOutcome) -> int:
+        return {
+            CategoryOutcome.LOSS: 0,
+            CategoryOutcome.OPEN: 1,
+            CategoryOutcome.WIN: 2,
+        }[outcome]
 
     @staticmethod
     def _question_key(move: QuestionMove) -> tuple[int, int, int]:

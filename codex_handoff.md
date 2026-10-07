@@ -266,3 +266,33 @@ Generated artifact: `all_tree_cycle.dot`. Graphviz was unavailable; render
 with `dot -Tpng all_tree_cycle.dot -o all_tree_cycle.png`.
 
 Full verification after this change: `100 passed in 52.28s`.
+
+## Strategic YES/NO answer evaluation
+
+`SingleCategoryTreePlayer` now evaluates both legal answer branches only when
+both YES and NO are supplied. Each branch is produced through the existing
+`QuestionContext.apply_answer()` transition, stabilized, projected from the
+answerer's physical seat, and solved with the answerer as local P1. The choice
+uses `WIN > OPEN > LOSS`; equal values retain the existing NO tie-break.
+Question selection and the Pythagoras rule were unchanged.
+
+`TreeDecisionDiagnostic` now records answerer, asker/category/card, both local
+outcomes, selected answer, and `strict` versus `tie` selection. The benchmark
+supports `--answer-diagnostics`.
+
+Final tests: `108 passed in 51.28s`.
+
+All-tree (`seed=123`, two identical runs, event limit 200) remained stable:
+
+- 24 events, natural termination, scores `(3, 0, 0)`, P1 winner;
+- 13 distinct states, zero repeated states, final `|D|=1`;
+- 4 strategic answers: 0 strict YES, 2 strict NO, 2 ties;
+- all 2 ties selected NO; repeated runs were identical;
+- answer diagnostics: P2 A1 LOSS/LOSS -> NO tie; P1 A2 LOSS/WIN -> NO;
+  P2 B1 LOSS/LOSS -> NO tie; P1 B2 LOSS/WIN -> NO.
+
+The regenerated graph is `all_tree_answer.dot`. No strict YES preference
+occurred in this trajectory. The requested 500-game tree-vs-random rerun was
+not practical: a 10-games-per-seat sample remained CPU-bound for over 100
+seconds, so no fresh performance comparison is reported. The prior baseline
+remains the only available comparison.
