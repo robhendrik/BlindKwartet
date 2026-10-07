@@ -89,9 +89,9 @@ class AllTreeObservation:
         return self.result.end_reason == "event_limit"
 
 
-def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObservation:
+def run_all_tree_game(*, seed: int = 123, event_limit: int = 500, global_depth: int = 0) -> AllTreeObservation:
     """Run one game with three identical deterministic tree strategies."""
-    players = tuple(SingleCategoryTreePlayer() for _ in range(3))
+    players = tuple(SingleCategoryTreePlayer(global_depth=global_depth) for _ in range(3))
     result = Game(players, first_player=0, seed=seed, max_events=event_limit).run()
 
     # Replay the public history to inspect the exact strategic states.  The
@@ -251,9 +251,9 @@ def observe_game(
     )
 
 
-def run_tree_game(tree_seat: int, game_number: int, seed: int, event_limit: int) -> GameObservation:
+def run_tree_game(tree_seat: int, game_number: int, seed: int, event_limit: int, global_depth: int = 0) -> GameObservation:
     game_seed = seed + game_number * 1_009 + tree_seat * 100_003
-    tree = SingleCategoryTreePlayer()
+    tree = SingleCategoryTreePlayer(global_depth=global_depth)
     players = tuple(
         tree if seat == tree_seat else RandomPlayer(seed=game_seed + 17 * seat + 1)
         for seat in range(3)
@@ -407,9 +407,9 @@ def _decision_summary(observations: list[GameObservation]) -> None:
     print(f"tree games hitting event_limit: {sum(observation.event_limit_reached for observation in observations)}")
 
 
-def run_benchmark(games: int, seed: int, event_limit: int) -> None:
+def run_benchmark(games: int, seed: int, event_limit: int, global_depth: int = 0) -> None:
     tree_observations = [
-        run_tree_game(seat, game, seed, event_limit)
+        run_tree_game(seat, game, seed, event_limit, global_depth)
         for seat in range(3)
         for game in range(games)
     ]
@@ -552,9 +552,9 @@ def write_state_graph(observation: AllTreeObservation, output_stem: str) -> tupl
     return dot_path, image_path
 
 
-def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plot_state_graph: bool, state_graph_output: str, answer_diagnostics: bool = False) -> None:
+def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plot_state_graph: bool, state_graph_output: str, answer_diagnostics: bool = False, global_depth: int = 0) -> None:
     observations = [
-        run_all_tree_game(seed=seed, event_limit=event_limit)
+        run_all_tree_game(seed=seed, event_limit=event_limit, global_depth=global_depth)
         for _ in range(repeat)
     ]
     for index, observation in enumerate(observations, start=1):
@@ -585,9 +585,10 @@ def main() -> None:
     parser.add_argument("--plot-state-graph", action="store_true", help="write and render the exact all-tree state graph")
     parser.add_argument("--state-graph-output", default="all_tree_cycle", help="DOT output stem")
     parser.add_argument("--answer-diagnostics", action="store_true", help="print strategic answer branch values")
+    parser.add_argument("--global-depth", type=int, default=0, help="stable global lookahead depth")
     args = parser.parse_args()
-    if args.games <= 0 or args.event_limit < 0 or args.repeat <= 0:
-        parser.error("--games/--repeat must be positive and --event-limit must be non-negative")
+    if args.games <= 0 or args.event_limit < 0 or args.repeat <= 0 or args.global_depth < 0:
+        parser.error("--games/--repeat/global-depth must be non-negative/positive and --event-limit must be non-negative")
     if args.all_tree:
         run_all_tree(
             seed=args.seed,
@@ -597,9 +598,10 @@ def main() -> None:
             plot_state_graph=args.plot_state_graph,
             state_graph_output=args.state_graph_output,
             answer_diagnostics=args.answer_diagnostics,
+            global_depth=args.global_depth,
         )
     else:
-        run_benchmark(args.games, args.seed, args.event_limit)
+        run_benchmark(args.games, args.seed, args.event_limit, args.global_depth)
 
 
 if __name__ == "__main__":

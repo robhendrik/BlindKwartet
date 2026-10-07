@@ -296,3 +296,33 @@ occurred in this trajectory. The requested 500-game tree-vs-random rerun was
 not practical: a 10-games-per-seat sample remained CPU-bound for over 100
 seconds, so no fresh performance comparison is reported. The prior baseline
 remains the only available comparison.
+
+## Shallow global Max-N search
+
+Added optional `SingleCategoryTreePlayer(global_depth=...)` and benchmark
+`--global-depth`. Depth 0 retains the existing question and answer behavior.
+Depth >0 searches complete stable transitions: question plus legal strategic
+answer, or quartet declaration. The search returns one lexicographic value per
+physical player and uses Max-N selection: the actor maximizes its component,
+and the answerer maximizes its own component with NO on equal branch values.
+
+Leaf values are `(terminal_rank, score, WIN_categories, OPEN_categories,
+-LOSS_categories)`. Nonterminal states use rank 0; terminal states use exact
+win/tie/loss rank followed by score. Existing `SingleCategorySolver` remains
+the category leaf evaluator. No canonicalization or new memoization was added.
+
+Full verification:
+
+```text
+PYTHONPATH=src:. pytest -q
+114 passed in 53.95s
+```
+
+Depth-0 all-tree remains the established 24-event natural termination with
+scores `(3, 0, 0)`. Depth-1/2 runs were attempted with the same seed and
+event limit, but the required all-player, all-category leaf evaluation became
+CPU-bound for several minutes in this environment and was stopped before a
+reliable trajectory was captured. The dominant bottleneck is root branching:
+each question evaluates both legal answer branches and three player-relative
+category vectors. This is the expected target for the next memoization phase;
+no memoization or symmetry work was added here.

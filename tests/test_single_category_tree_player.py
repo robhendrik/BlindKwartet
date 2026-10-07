@@ -1,12 +1,16 @@
+from dataclasses import replace
+
 from blind_kwartet.game import Game
 from blind_kwartet.history import QuestionEvent
 from blind_kwartet.moves import AnswerMove, QuestionMove, QuartetMove, YES
 from blind_kwartet.players import (
+    _GlobalSearch,
     Player,
     PlayerView,
     RandomPlayer,
     SingleCategoryTreePlayer,
 )
+from blind_kwartet.single_category_solver import SingleCategorySolver
 from blind_kwartet.search_state import SearchState
 from blind_kwartet.single_category_solver import CategoryOutcome, CategoryResult, decode_world
 
@@ -261,3 +265,93 @@ def test_random_player_and_short_game_remain_compatible():
 
     assert result.end_reason in {"event_limit", "terminal"}
     assert result.n_events <= 6
+
+
+def test_global_depth_zero_keeps_the_existing_question_path(monkeypatch):
+    player = SingleCategoryTreePlayer(global_depth=0)
+    state = SearchState.initial()
+    moves = (_question(0, 1, 0), _question(0, 2, 0))
+    monkeypatch.setattr(
+        player,
+        "_evaluate_question",
+        lambda _view, move: CategoryResult(
+            CategoryOutcome.WIN if move.target == 1 else CategoryOutcome.LOSS
+        ),
+    )
+
+    assert player.play(PlayerView(0, state, moves)) == moves[0]
+
+
+def test_global_depth_one_expands_question_and_all_legal_answers(monkeypatch):
+    state = SearchState.initial()
+    question = state.legal_questions()[0]
+    context = state.apply_question(question)
+    assert len(context.legal_answers()) == 2
+    search = _GlobalSearch(SingleCategorySolver())
+    seen = []
+
+    def capture(resulting_state, depth):
+        seen.append((resulting_state, depth))
+        return ((0, 0, 0, 0, 0),) * 3
+
+    monkeypatch.setattr(search, "evaluate_state", capture)
+    search.evaluate_action(state, question, 1)
+
+    assert len(seen) == 2
+    assert all(depth == 0 for _, depth in seen)
+
+
+def test_global_answer_selection_uses_answerer_component_and_no_tie(monkeypatch):
+    state = SearchState.initial()
+    question = state.legal_questions()[0]
+    context = state.apply_question(question)
+    search = _GlobalSearch(SingleCategorySolver())
+
+    def values(resulting_state, _depth):
+        if resulting_state.T[question.card] == 0:
+            return ((0, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 0, 0, 0))
+        return ((0, 0, 0, 0, 0), (0, 2, 0, 0, 0), (0, 0, 0, 0, 0))
+
+    monkeypatch.setattr(search, "evaluate_state", values)
+    selected, yes_value, no_value = search.evaluate_answer_branches(context, question.target, 1)
+    assert selected == AnswerMove(False)  # answerer P2 prefers the NO branch
+    assert yes_value[1] < no_value[1]
+
+
+def test_global_root_actor_selects_by_own_component(monkeypatch):
+    player = SingleCategoryTreePlayer(global_depth=1)
+    state = SearchState.initial()
+    moves = (_question(0, 1, 0), _question(1, 2, 0))
+
+    def values(_self, _state, action, _depth):
+        score = 1 if action == moves[1] else 0
+        return ((0, score, 0, 0, 0), (0, 0, 0, 0, 0), (0, 0, 0, 0, 0))
+
+    monkeypatch.setattr(_GlobalSearch, "evaluate_action", values)
+    assert player.play(PlayerView(0, state, moves)) == moves[1]
+
+
+def test_global_leaf_includes_resolved_score_and_local_category_values(monkeypatch):
+    overrides = (0,) * 4 + (-1,) * 8
+    state = replace(SearchState.initial(), current_owner_override=overrides)
+    search = _GlobalSearch(SingleCategorySolver())
+    monkeypatch.setattr(
+        search.solver,
+        "solve",
+        lambda _bitmap, _actor: CategoryResult(CategoryOutcome.WIN),
+    )
+
+    values = search._leaf_value(state)
+
+    assert values[0] == (0, 1, 2, 0, 0)
+    assert values[1] == (0, 0, 2, 0, 0)
+
+
+def test_global_terminal_value_overrides_heuristic_shape():
+    overrides = (0,) * 8 + (1,) * 4
+    state = replace(SearchState.initial(), current_owner_override=overrides)
+    values = _GlobalSearch._terminal_value(state)
+
+    assert state.is_terminal
+    assert values[0] == (2, 2, 0, 0, 0)
+    assert values[1] == (0, 1, 0, 0, 0)

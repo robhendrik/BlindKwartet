@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import random
 from dataclasses import dataclass
+import time
 
 from .history import GameEvent, QuestionEvent
 from .category_projection import project_category_bitmap
@@ -17,6 +18,127 @@ from .single_category_solver import (
     LocalCategoryMove,
     SingleCategorySolver,
 )
+
+
+GlobalPlayerValue = tuple[int, int, int, int, int]
+GlobalValueVector = tuple[GlobalPlayerValue, ...]
+
+
+def _global_action_key(action) -> tuple[int, int, int, int]:
+    if isinstance(action, QuartetMove):
+        return (0, action.category, 0, 0)
+    return (1, action.category, action.target, action.card)
+
+
+class _GlobalSearch:
+    """Small depth-limited Max-N search over stable global SearchStates."""
+
+    def __init__(self, solver: SingleCategorySolver) -> None:
+        self.solver = solver
+        self.nodes_expanded = 0
+        self.leaf_evaluations = 0
+        self.terminal_evaluations = 0
+        self.max_branching_factor = 0
+
+    def evaluate_state(self, state: SearchState, depth: int) -> GlobalValueVector:
+        self.nodes_expanded += 1
+        if state.is_terminal:
+            self.terminal_evaluations += 1
+            return self._terminal_value(state)
+        if depth <= 0:
+            self.leaf_evaluations += 1
+            return self._leaf_value(state)
+
+        actions = self._ordered_actions(state.legal_moves())
+        self.max_branching_factor = max(self.max_branching_factor, len(actions))
+        if not actions:
+            return self._leaf_value(state)
+        values = [self._evaluate_action(state, action, depth) for action in actions]
+        actor = state.actor
+        best_index = max(
+            range(len(values)),
+            key=lambda index: values[index][actor],
+        )
+        return values[best_index]
+
+    def evaluate_action(
+        self,
+        state: SearchState,
+        action,
+        depth: int,
+    ) -> GlobalValueVector:
+        return self._evaluate_action(state, action, depth)
+
+    def evaluate_answer_branches(
+        self,
+        context,
+        answerer: int,
+        remaining_depth: int,
+    ) -> tuple[AnswerMove, GlobalValueVector, GlobalValueVector | None]:
+        legal_answers = context.legal_answers()
+        if len(legal_answers) == 1:
+            successor = self._answer_successor(context, legal_answers[0])
+            value = self.evaluate_state(successor, remaining_depth)
+            return legal_answers[0], value, None
+        yes = self._answer_successor(context, AnswerMove(True))
+        no = self._answer_successor(context, AnswerMove(False))
+        yes_value = self.evaluate_state(yes, remaining_depth)
+        no_value = self.evaluate_state(no, remaining_depth)
+        if yes_value[answerer] > no_value[answerer]:
+            return AnswerMove(True), yes_value, no_value
+        return AnswerMove(False), yes_value, no_value
+
+    def _evaluate_action(self, state: SearchState, action, depth: int) -> GlobalValueVector:
+        if isinstance(action, QuartetMove):
+            successor = state.apply_quartet(action).resolve_forced_quartets()
+            return self.evaluate_state(successor, depth - 1)
+        context = state.apply_question(action)
+        answer, yes_value, no_value = self.evaluate_answer_branches(
+            context,
+            action.target,
+            depth - 1,
+        )
+        # The branch values were already evaluated while selecting the
+        # answer; do not expand the selected successor a second time.
+        return yes_value if answer.yes else no_value  # type: ignore[return-value]
+
+    @staticmethod
+    def _answer_successor(context, answer: AnswerMove) -> SearchState:
+        return context.apply_answer(answer).resolve_forced_quartets()
+
+    def _leaf_value(self, state: SearchState) -> GlobalValueVector:
+        values = []
+        for player in range(3):
+            wins = opens = losses = 0
+            for category in range(3):
+                if category in state.resolved_categories:
+                    continue
+                bitmap = project_category_bitmap(state, category, player)
+                local_actor = (state.actor - player) % 3
+                outcome = self.solver.solve(bitmap, local_actor).outcome
+                if outcome is CategoryOutcome.WIN:
+                    wins += 1
+                elif outcome is CategoryOutcome.OPEN:
+                    opens += 1
+                else:
+                    losses += 1
+            values.append((0, state.quartet_scores[player], wins, opens, -losses))
+        return tuple(values)  # type: ignore[return-value]
+
+    @staticmethod
+    def _terminal_value(state: SearchState) -> GlobalValueVector:
+        scores = state.quartet_scores
+        high = max(scores)
+        winners = sum(score == high for score in scores)
+        values = []
+        for player, score in enumerate(scores):
+            rank = 2 if score == high and winners == 1 else 1 if score == high else 0
+            values.append((rank, score, 0, 0, 0))
+        return tuple(values)  # type: ignore[return-value]
+
+    @staticmethod
+    def _ordered_actions(actions):
+        return tuple(sorted(actions, key=_global_action_key))
 
 
 @dataclass(frozen=True)
@@ -45,6 +167,14 @@ class TreeDecisionDiagnostic:
     no_outcome: CategoryOutcome | None = None
     selected_answer: bool | None = None
     answer_selection_reason: str | None = None
+    global_depth: int = 0
+    global_nodes_expanded: int = 0
+    global_leaf_evaluations: int = 0
+    global_terminal_evaluations: int = 0
+    global_max_branching_factor: int = 0
+    selected_global_value: GlobalPlayerValue | None = None
+    competing_global_values: tuple[tuple[str, GlobalPlayerValue], ...] = ()
+    global_runtime_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -91,7 +221,10 @@ class RandomPlayer(Player):
 class SingleCategoryTreePlayer(Player):
     """Choose supplied asks using exact single-category adversarial search."""
 
-    def __init__(self) -> None:
+    def __init__(self, global_depth: int = 0) -> None:
+        if global_depth < 0:
+            raise ValueError("global_depth must be non-negative")
+        self.global_depth = global_depth
         self.solver = SingleCategorySolver()
         self.moves_evaluated = 0
         self.win_evaluations = 0
@@ -142,6 +275,10 @@ class SingleCategoryTreePlayer(Player):
             no_outcome: CategoryOutcome | None = None,
             selected_answer: bool | None = None,
             answer_selection_reason: str | None = None,
+            global_search: _GlobalSearch | None = None,
+            selected_global_value: GlobalPlayerValue | None = None,
+            competing_global_values: tuple[tuple[str, GlobalPlayerValue], ...] = (),
+            global_runtime_ms: float | None = None,
         ) -> None:
             self.decision_diagnostics.append(
                 TreeDecisionDiagnostic(
@@ -167,11 +304,19 @@ class SingleCategoryTreePlayer(Player):
                     no_outcome=no_outcome,
                     selected_answer=selected_answer,
                     answer_selection_reason=answer_selection_reason,
+                    global_depth=self.global_depth,
+                    global_nodes_expanded=0 if global_search is None else global_search.nodes_expanded,
+                    global_leaf_evaluations=0 if global_search is None else global_search.leaf_evaluations,
+                    global_terminal_evaluations=0 if global_search is None else global_search.terminal_evaluations,
+                    global_max_branching_factor=0 if global_search is None else global_search.max_branching_factor,
+                    selected_global_value=selected_global_value,
+                    competing_global_values=competing_global_values,
+                    global_runtime_ms=global_runtime_ms,
                 )
             )
 
         quartets = [move for move in legal_moves if isinstance(move, QuartetMove)]
-        if quartets:
+        if quartets and self.global_depth == 0:
             choice = min(quartets, key=lambda move: move.category)
             record("quartet", selected_category=choice.category)
             return choice
@@ -183,17 +328,31 @@ class SingleCategoryTreePlayer(Player):
             answer_asker = view.history[-1].asker
             if len(answers) == 2:
                 context = view.state.apply_question(question)
-                yes_result = self._evaluate_answer_branch(
-                    view, question, context, AnswerMove(True)
-                )
-                no_result = self._evaluate_answer_branch(
-                    view, question, context, AnswerMove(False)
-                )
-                if self._outcome_rank(yes_result) > self._outcome_rank(no_result):
+                global_search = None
+                start = time.perf_counter()
+                if self.global_depth > 0:
+                    global_search = _GlobalSearch(self.solver)
+                    choice, yes_value, no_value = global_search.evaluate_answer_branches(
+                        context,
+                        view.player_id,
+                        self.global_depth - 1,
+                    )
+                    yes_result = no_result = None
+                else:
+                    yes_result = self._evaluate_answer_branch(
+                        view, question, context, AnswerMove(True)
+                    )
+                    no_result = self._evaluate_answer_branch(
+                        view, question, context, AnswerMove(False)
+                    )
+                    yes_value = no_value = None
+                if self.global_depth == 0 and self._outcome_rank(yes_result) > self._outcome_rank(no_result):
                     choice = AnswerMove(True)
                     reason = "strict"
-                else:
+                elif self.global_depth == 0:
                     reason = "tie" if yes_result is no_result else "strict"
+                else:
+                    reason = "tie" if yes_value[view.player_id] == no_value[view.player_id] else "strict"
                 record(
                     "answer",
                     answerer=view.player_id,
@@ -204,6 +363,16 @@ class SingleCategoryTreePlayer(Player):
                     no_outcome=no_result,
                     selected_answer=choice.yes,
                     answer_selection_reason=reason,
+                    global_search=global_search,
+                    selected_global_value=(
+                        yes_value[view.player_id] if choice.yes else no_value[view.player_id]
+                    ) if self.global_depth > 0 else None,
+                    competing_global_values=(
+                        (("YES", yes_value[view.player_id]), ("NO", no_value[view.player_id]))
+                        if self.global_depth > 0 else ()
+                    ),
+                    global_runtime_ms=(time.perf_counter() - start) * 1000
+                    if self.global_depth > 0 else None,
                 )
             else:
                 record(
@@ -217,8 +386,38 @@ class SingleCategoryTreePlayer(Player):
             return choice
 
         asks = [move for move in legal_moves if isinstance(move, QuestionMove)]
-        if not asks:
+        if not asks and self.global_depth == 0:
             raise ValueError("legal moves contain no supported action")
+
+        if self.global_depth > 0:
+            start = time.perf_counter()
+            global_search = _GlobalSearch(self.solver)
+            ordered_actions = _GlobalSearch._ordered_actions(legal_moves)
+            evaluations_global = tuple(
+                (
+                    move,
+                    global_search.evaluate_action(view.state, move, self.global_depth),
+                )
+                for move in ordered_actions
+            )
+            actor = view.player_id
+            selected_index = max(
+                range(len(evaluations_global)),
+                key=lambda index: evaluations_global[index][1][actor],
+            )
+            choice = evaluations_global[selected_index][0]
+            competing = tuple(
+                (repr(move), value[actor]) for move, value in evaluations_global
+            )
+            record(
+                "question" if isinstance(choice, QuestionMove) else "quartet",
+                selected_category=getattr(choice, "category", None),
+                global_search=global_search,
+                selected_global_value=evaluations_global[selected_index][1][actor],
+                competing_global_values=competing,
+                global_runtime_ms=(time.perf_counter() - start) * 1000,
+            )
+            return choice
 
         evaluations = tuple(
             (move, self._evaluate_question(view, move))
