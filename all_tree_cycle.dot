@@ -1,0 +1,12 @@
+digraph all_tree_state_cycle {
+  rankdir=LR;
+  node [shape=box];
+  S0 [label="S0\\nactor P1 |D|=34032\\nunresolved=3 scores=(0,0,0)"];
+  S1 [label="S1\\nactor P2 |D|=9032\\nunresolved=3 scores=(0,0,0)"];
+  S2 [label="S2\\nactor P1 |D|=6720\\nunresolved=3 scores=(0,0,0)", peripheries=2];
+  S3 [label="S3\\nactor P2 |D|=6720\\nunresolved=3 scores=(0,0,0)", peripheries=2];
+  S0 -> S1 [label="P1 asks P2 A1 / NO"];
+  S1 -> S2 [label="P2 asks P1 A1 / NO"];
+  S2 -> S3 [label="P1 asks P2 A1 / NO\\n x4"];
+  S3 -> S2 [label="P2 asks P1 A1 / NO\\n x4"];
+}

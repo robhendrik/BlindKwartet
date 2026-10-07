@@ -302,6 +302,23 @@ def world_survives_prefix(
     return True
 
 
+def _current_state_after_prefix(
+    world: InitialWorld,
+    events: list[Event],
+) -> ReplayState:
+    """Replay a valid prefix to obtain its current physical ownership."""
+    state = create_replay_state(world)
+    pending_question = None
+    for event in events:
+        if isinstance(event, Question):
+            pending_question = event
+        else:
+            if event.value:
+                apply_transfer(state, pending_question)
+            pending_question = None
+    return state
+
+
 # ---------------------------------------------------------------------------
 # Information state
 # ---------------------------------------------------------------------------
@@ -311,6 +328,20 @@ def information_state(
     events: list[Event],
 ) -> frozenset[int]:
     """Return IDs of all initial worlds consistent with the transcript."""
+
+    if events and isinstance(events[-1], Question):
+        question = events[-1]
+        prior_ids = information_state(worlds, events[:-1])
+        if not any(
+            question_is_legal(
+                current := _current_state_after_prefix(world, events[:-1]),
+                question,
+            )
+            and owner_of(current, question.card) == question.target
+            for world in worlds
+            if world.world_id in prior_ids
+        ):
+            return frozenset()
 
     return frozenset(
         world.world_id

@@ -216,6 +216,10 @@ class SearchState:
             raise ValueError("question is incompatible with every deal")
         questioned = replace(silenced, possible_initial_deals=question_mask)
         yes_mask = questioned._owner_mask(move.target, move.card)
+        if not yes_mask:
+            raise ValueError(
+                "question is illegal: target cannot own the requested card"
+            )
         no_mask = questioned.D & ~yes_mask
         return QuestionContext(questioned, move, yes_mask, no_mask)
 
@@ -417,6 +421,9 @@ class QuestionContext:
         return self.no_mask
 
     def legal_answers(self) -> tuple[AnswerMove, ...]:
+        # A QuestionContext created by SearchState always has a YES branch.
+        # The defensive check in apply_answer still protects callers that
+        # manufacture an invalid context internally.
         answers = []
         if self.yes_mask:
             answers.append(YES)

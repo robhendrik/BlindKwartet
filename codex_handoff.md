@@ -201,3 +201,68 @@ The next algorithmic step remains measurement: run longer bounded complete
 games and inspect how often tree turns offer WIN, OPEN, or only LOSS options,
 and how often different categories have different best local values, before
 choosing minimal multi-category lookahead.
+
+## Pythagoras termination rule
+
+Implemented the global question rule: after normal asker/category/request-card
+filtering, a question is legal only when the target owns the requested card in
+at least one surviving current world (`D_yes != 0`). This is enforced by
+`SearchState`, `QuestionContext` creation, `SingleCategorySolver` move
+generation/evaluation, the modular `QuestionReferee`, and the legacy
+reference `information_state` replay. No strategy, n-ply search,
+canonicalization, or new memoization was added.
+
+Updated `rules.md` to document condition 6, strategic YES/NO, forced YES, and
+forced NO as unreachable under legal play. The existing `apply_answer` guard
+still rejects impossible branches if an invalid context is manually
+manufactured; no legal game path can create a forced-NO context.
+
+Tests added/updated cover the post-NO reverse-question rejection, non-empty
+YES branches for legal questions, local solver agreement, and legal replay
+transcripts. Full result:
+
+```text
+103 passed in 63.11s
+```
+
+With `seed=123`, three identical tree players, `--repeat 2`, and
+`--event-limit 200`, both runs terminated naturally:
+
+- events: `24`; scores `(3, 0, 0)`; winner P1;
+- distinct exact SearchStates: `13`;
+- repeated-state encounters: `0`;
+- final `|D|=1`, first reached after stable event 12;
+- first WIN: P1 at event 5; P2/P3 never saw WIN;
+- category switches: P1 `2`, P2 `1`, P3 `0`;
+- graph had 12 edges and no cycle; repeated runs were identical.
+
+The previous 4-state/2-state deterministic A1/NO cycle is gone. The new
+state graph is `all_tree_cycle_after.dot`; Graphviz was unavailable, so render
+it with `dot -Tpng all_tree_cycle_after.dot -o all_tree_cycle_after.png`.
+
+## Exact SearchState cycle graph
+
+Updated `scripts/benchmark_single_category_tree.py` with `--plot-state-graph`
+and `--state-graph-output`. It records raw `(D, T, actor)` stable states,
+aggregates repeated labelled transitions, reports cycle metadata, and writes
+DOT without adding a Graphviz dependency.
+
+Verified command:
+
+```text
+PYTHONPATH=src:. python -u scripts/benchmark_single_category_tree.py \
+  --all-tree --repeat 1 --event-limit 20 --seed 123 \
+  --plot-state-graph --state-graph-output all_tree_cycle
+```
+
+Result: 4 distinct states, first repeat `S2`, cycle entry event 4, cycle
+length 2, cycle states `S2` and `S3`, with 7 repeated state encounters.
+The transition table is `S0->S1` once, `S1->S2` once, `S2->S3` four times,
+and `S3->S2` four times; every transition is the deterministic `A1 / NO`
+exchange between P1 and P2. The game hit the event limit at 20 events with
+scores `(0, 0, 0)` and final `|D|=6720`.
+
+Generated artifact: `all_tree_cycle.dot`. Graphviz was unavailable; render
+with `dot -Tpng all_tree_cycle.dot -o all_tree_cycle.png`.
+
+Full verification after this change: `100 passed in 52.28s`.

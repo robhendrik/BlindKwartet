@@ -94,7 +94,7 @@ def test_scripted_replay_matches_reference_after_every_event():
     events = [
         Question(0, 1, "A1"), Answer(False),
         Question(1, 0, "A2"), Answer(True),
-        Question(1, 0, "A1"), Answer(False),
+        Question(1, 0, "A3"), Answer(False),
     ]
     worlds = generate_initial_worlds()
     search = SearchState.initial()

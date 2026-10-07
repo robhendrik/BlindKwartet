@@ -35,9 +35,20 @@ class QuestionReferee:
         if category.completed:
             raise IllegalEvent("That category has already been completed.")
 
-        category.worlds = [
+        surviving = [
             world
             for world in category.worlds
             if question.asker in world.current
             and world.current[question.card] != question.asker
         ]
+        # Pythagoras termination rule: after normal asking constraints, the
+        # target must still be able to own the requested card in at least one
+        # surviving current world.  This rejects forced-NO questions.
+        if not any(
+            world.current[question.card] == question.target
+            for world in surviving
+        ):
+            raise IllegalEvent(
+                "The target cannot own that card in any surviving world."
+            )
+        category.worlds = surviving

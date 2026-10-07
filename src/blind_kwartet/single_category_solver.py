@@ -165,6 +165,14 @@ class SingleCategorySolver:
             owners = decode_world(index)
             if actor in owners and owners[move.card] != actor:
                 surviving |= 1 << index
+        # Pythagoras termination rule: a question must have a possible YES
+        # branch.  Returning no worlds makes such a move unavailable to both
+        # move generation and direct evaluation.
+        if not any(
+            decode_world(index)[move.card] == move.respondent
+            for index in SingleCategorySolver._set_bits(surviving)
+        ):
+            return 0
         return surviving
 
     @staticmethod

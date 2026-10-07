@@ -91,7 +91,9 @@ Therefore:
 - the set of possible initial deals can only shrink;
 - the current ownership of cards may change in either direction.
 
-No special anti-cycle rule is imposed.
+The Pythagoras termination rule below is part of question legality. It is not
+an unrelated anti-cycle rule: it prevents questions whose YES branch is
+already publicly impossible.
 
 ---
 
@@ -129,14 +131,22 @@ A question is compatible with a possible current world only if:
 3. the category is unresolved;
 4. the asker currently owns at least one card from that category;
 5. the asker does not currently own the requested card.
+6. the target could currently own the requested card in at least one
+   surviving current world (`D_YES != 0`).
 
 Because there is no hidden true deal, asking the question is itself public information.
+
+Condition 6 is the Pythagoras termination rule. It intentionally forbids a
+question whose answer would be forced NO, so the public game cannot repeat a
+question after its target has become impossible in every surviving world.
 
 The question filters `D` to the initial deals whose corresponding current world makes that question legal.
 
 If no initial deal remains, the question is illegal.
 
-If at least one initial deal remains, the question is accepted.
+If at least one initial deal remains and `D_YES` is non-empty, the question is
+accepted. A question with an empty YES branch is illegal even when its NO
+branch is non-empty.
 
 ---
 
@@ -171,12 +181,12 @@ P2 	ext{ does not currently own } A3\}.
 There are three cases:
 
 ```text
-YES possible, NO possible   -> the asked player chooses YES or NO
-YES possible, NO impossible -> YES is forced
-YES impossible, NO possible -> NO is forced
+YES possible, NO possible   -> strategic choice
+YES possible, NO impossible -> forced YES
+YES impossible, NO possible -> unreachable under legal play
 ```
 
-An answer is legal if and only if its corresponding set of possible initial deals is non-empty.
+An answer is legal if and only if its corresponding set of possible initial deals is non-empty. The final case is intentionally unreachable because condition 6 rejects the question before an answer phase can begin.
 
 The number of deals in a branch is **not a probability**.
 

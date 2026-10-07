@@ -12,6 +12,9 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
+import shutil
+import subprocess
 from statistics import mean
 from typing import Iterable
 
@@ -26,6 +29,26 @@ from blind_kwartet.players import (
 from blind_kwartet.result import GameResult
 from blind_kwartet.single_category_solver import CategoryOutcome
 from blind_kwartet.search_state import SearchState
+
+
+@dataclass(frozen=True)
+class StateGraphEdge:
+    source: int
+    target: int
+    transition: str
+    count: int
+
+
+@dataclass(frozen=True)
+class StateGraph:
+    states: tuple[SearchState, ...]
+    edges: tuple[StateGraphEdge, ...]
+    trajectory: tuple[int, ...]
+    trajectory_events: tuple[int, ...]
+    first_repeat_state: int | None
+    cycle_entry_event: int | None
+    cycle_length: int | None
+    cycle_states: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -58,6 +81,7 @@ class AllTreeObservation:
     distinct_search_states: int
     final_deal_count: int
     first_singleton_event: int | None
+    state_graph: StateGraph
 
     @property
     def event_limit_reached(self) -> bool:
@@ -83,10 +107,29 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObse
     switches = [0, 0, 0]
     last_category = [None, None, None]
     diagnostic_indices = [0, 0, 0]
+    graph_states = [state]
+    graph_ids = {state: 0}
+    graph_trajectory = [0]
+    graph_events = [0]
+    graph_edges: dict[tuple[int, int, str], int] = {}
+    pending_question = None
+
+    def add_graph_transition(next_state: SearchState, event_number: int, label: str) -> None:
+        source = graph_trajectory[-1]
+        target = graph_ids.get(next_state)
+        if target is None:
+            target = len(graph_states)
+            graph_ids[next_state] = target
+            graph_states.append(next_state)
+        graph_trajectory.append(target)
+        graph_events.append(event_number)
+        edge_key = (source, target, label)
+        graph_edges[edge_key] = graph_edges.get(edge_key, 0) + 1
 
     for event_number, event in enumerate(result.history, start=1):
         if isinstance(event, QuestionEvent):
             pending = state.apply_question(QuestionMove(event.target, event.category, event.card))
+            pending_question = event
             seat = event.asker
             diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
             diagnostic_indices[seat] += 1
@@ -105,16 +148,28 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObse
         elif isinstance(event, AnswerEvent):
             assert pending is not None
             state = pending.apply_answer(AnswerMove(event.yes))
+            assert pending_question is not None
+            card_name = f"{chr(ord('A') + pending_question.category)}{pending_question.card - pending_question.category * 4 + 1}"
+            answer = "YES" if event.yes else "NO"
+            label = (
+                f"P{pending_question.asker + 1} asks P{pending_question.target + 1} "
+                f"{card_name} / {answer}"
+            )
+            if event.yes:
+                label += f" (P{pending_question.target + 1}->P{pending_question.asker + 1})"
+            add_graph_transition(state, event_number, label)
             if pending_has_strategic_answer:
                 seat = event.target
                 diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
                 diagnostic_indices[seat] += 1
                 assert diagnostic.action_kind == "answer"
             pending = None
+            pending_question = None
             pending_has_strategic_answer = False
             states.append(state)
         elif isinstance(event, QuartetEvent):
             state = state.apply_quartet(QuartetMove(event.category))
+            add_graph_transition(state, event_number, f"P{event.player + 1} declares quartet {chr(ord('A') + event.category)}")
             seat = event.player
             diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
             diagnostic_indices[seat] += 1
@@ -125,6 +180,36 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObse
 
     counts = Counter(states)
     repeated = sum(count - 1 for count in counts.values() if count > 1)
+    first_repeat_state = None
+    first_repeat_position = None
+    for position, state_id in enumerate(graph_trajectory):
+        prior = graph_trajectory[:position]
+        if state_id in prior:
+            first_repeat_state = state_id
+            first_repeat_position = position
+            break
+    if first_repeat_position is None:
+        cycle_entry_event = None
+        cycle_length = None
+        cycle_states = ()
+    else:
+        first_position = graph_trajectory.index(first_repeat_state)
+        cycle_entry_event = graph_events[first_position]
+        cycle_length = first_repeat_position - first_position
+        cycle_states = tuple(graph_trajectory[first_position:first_repeat_position])
+    state_graph = StateGraph(
+        states=tuple(graph_states),
+        edges=tuple(
+            StateGraphEdge(source, target, label, count)
+            for (source, target, label), count in graph_edges.items()
+        ),
+        trajectory=tuple(graph_trajectory),
+        trajectory_events=tuple(graph_events),
+        first_repeat_state=first_repeat_state,
+        cycle_entry_event=cycle_entry_event,
+        cycle_length=cycle_length,
+        cycle_states=cycle_states,
+    )
     singleton_event = next(
         (index for index, item in enumerate(states[1:], start=1) if item.D.bit_count() == 1),
         None,
@@ -141,6 +226,7 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500) -> AllTreeObse
         distinct_search_states=len(counts),
         final_deal_count=state.D.bit_count(),
         first_singleton_event=singleton_event,
+        state_graph=state_graph,
     )
 
 
@@ -363,13 +449,67 @@ def print_all_tree_observation(observation: AllTreeObservation, *, verbose: bool
         f"final_|D|={observation.final_deal_count} "
         f"first_|D|=1_event={observation.first_singleton_event}"
     )
+    graph = observation.state_graph
+    print(
+        f"state_graph_nodes={len(graph.states)} state_graph_edges={len(graph.edges)} "
+        f"first_repeat_state={None if graph.first_repeat_state is None else f'S{graph.first_repeat_state}'} "
+        f"cycle_entry_event={graph.cycle_entry_event} cycle_length={graph.cycle_length} "
+        f"cycle_states={tuple(f'S{state_id}' for state_id in graph.cycle_states)}"
+    )
+    print("from   to   count   transition")
+    for edge in graph.edges:
+        print(f"S{edge.source:<5} S{edge.target:<5} {edge.count:5d}   {edge.transition}")
     if verbose:
         print("Transcript")
         for event_number, event in enumerate(result.history, start=1):
             print(f"{event_number:3d}: {_event_text(event)}")
 
 
-def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool) -> None:
+def _dot_quote(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def write_state_graph(observation: AllTreeObservation, output_stem: str) -> tuple[Path, Path | None]:
+    """Write the raw labelled state graph and render it when Graphviz exists."""
+    graph = observation.state_graph
+    dot_path = Path(output_stem)
+    if dot_path.suffix != ".dot":
+        dot_path = dot_path.with_suffix(".dot")
+    lines = ["digraph all_tree_state_cycle {", "  rankdir=LR;", "  node [shape=box];"]
+    cycle_set = set(graph.cycle_states)
+    for state_id, state in enumerate(graph.states):
+        scores = ",".join(map(str, state.quartet_scores))
+        label = (
+            f"S{state_id}\\nactor P{state.actor + 1} |D|={state.D.bit_count()}"
+            f"\\nunresolved={3 - len(state.resolved_categories)} scores=({scores})"
+        )
+        attrs = f'label="{_dot_quote(label)}"'
+        if state_id in cycle_set:
+            attrs += ", peripheries=2"
+        lines.append(f"  S{state_id} [{attrs}];")
+    for edge in graph.edges:
+        label = edge.transition + (f"\\n x{edge.count}" if edge.count > 1 else "")
+        lines.append(
+            f'  S{edge.source} -> S{edge.target} [label="{_dot_quote(label)}"];'
+        )
+    lines.append("}")
+    dot_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    dot_executable = shutil.which("dot")
+    if dot_executable is None:
+        print(f"Graphviz not installed; render with: dot -Tpng {dot_path} -o {dot_path.with_suffix('.png')}")
+        return dot_path, None
+    image_path = dot_path.with_suffix(".png")
+    subprocess.run(
+        [dot_executable, "-Tpng", str(dot_path), "-o", str(image_path)],
+        check=True,
+    )
+    print(f"wrote {dot_path}")
+    print(f"wrote {image_path}")
+    return dot_path, image_path
+
+
+def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plot_state_graph: bool, state_graph_output: str) -> None:
     observations = [
         run_all_tree_game(seed=seed, event_limit=event_limit)
         for _ in range(repeat)
@@ -377,6 +517,8 @@ def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool) -> 
     for index, observation in enumerate(observations, start=1):
         print(f"\nRun {index}/{repeat}")
         print_all_tree_observation(observation, verbose=verbose)
+        if plot_state_graph and index == 1:
+            write_state_graph(observation, state_graph_output)
     trajectories = [
         (observation.result.seat_scores, observation.result.winner_seats,
          observation.result.end_reason, observation.result.history)
@@ -393,11 +535,20 @@ def main() -> None:
     parser.add_argument("--all-tree", action="store_true", help="run three identical tree players")
     parser.add_argument("--repeat", type=int, default=3, help="repeat the identical all-tree setup")
     parser.add_argument("--verbose", action="store_true", help="print the full all-tree transcript")
+    parser.add_argument("--plot-state-graph", action="store_true", help="write and render the exact all-tree state graph")
+    parser.add_argument("--state-graph-output", default="all_tree_cycle", help="DOT output stem")
     args = parser.parse_args()
     if args.games <= 0 or args.event_limit < 0 or args.repeat <= 0:
         parser.error("--games/--repeat must be positive and --event-limit must be non-negative")
     if args.all_tree:
-        run_all_tree(seed=args.seed, event_limit=args.event_limit, repeat=args.repeat, verbose=args.verbose)
+        run_all_tree(
+            seed=args.seed,
+            event_limit=args.event_limit,
+            repeat=args.repeat,
+            verbose=args.verbose,
+            plot_state_graph=args.plot_state_graph,
+            state_graph_output=args.state_graph_output,
+        )
     else:
         run_benchmark(args.games, args.seed, args.event_limit)
 

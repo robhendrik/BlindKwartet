@@ -1,3 +1,5 @@
+import pytest
+
 from blind_kwartet.single_category_solver import (
     CategoryOutcome,
     CategoryResult,
@@ -123,7 +125,7 @@ def test_yes_filters_and_transfers_and_no_changes_actor():
     assert (world_bit((2, 0, 2, 2)), 1) in seen
 
 
-def test_impossible_answer_branches_are_ignored():
+def test_impossible_yes_branch_makes_local_question_illegal():
     solver = SingleCategorySolver()
     bitmap = world_bit((2, 2, 0, 2))
     seen = []
@@ -131,9 +133,11 @@ def test_impossible_answer_branches_are_ignored():
         (next_bitmap, next_actor)
     ) or CategoryResult(CategoryOutcome.WIN)  # type: ignore[method-assign]
 
-    result = solver.evaluate_move(bitmap, 0, LocalCategoryMove(1, 0))
-    assert result.outcome is CategoryOutcome.WIN
-    assert seen == [(bitmap, 1)]
+    move = LocalCategoryMove(1, 0)
+    assert solver._legal_question_bitmap(bitmap, 0, move) == 0
+    with pytest.raises(ValueError):
+        solver.evaluate_move(bitmap, 0, move)
+    assert seen == []
 
 
 def test_move_branch_combinations_use_worst_answer(monkeypatch):

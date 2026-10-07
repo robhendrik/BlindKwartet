@@ -28,7 +28,7 @@ def test_tree_player_is_player_and_returns_supplied_action():
     player = SingleCategoryTreePlayer()
     assert isinstance(player, Player)
     state = _known_category_state((0, 1, 2, 2))
-    moves = (_question(0, 1, 1), _question(0, 2, 1))
+    moves = (_question(0, 1, 1), _question(0, 2, 2))
 
     chosen = player.play(PlayerView(0, state, moves))
 

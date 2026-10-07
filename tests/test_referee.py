@@ -37,6 +37,16 @@ def test_empty_transcript_keeps_all_worlds(worlds):
     assert len(state(worlds, [])) == 34_032
 
 
+def test_forced_no_question_is_rejected_by_reference_information_state(worlds):
+    transcript = [
+        Question(asker=0, target=1, card="A1"),
+        Answer(False),
+        Question(asker=1, target=0, card="A1"),
+    ]
+
+    assert state(worlds, transcript) == frozenset()
+
+
 # ---------------------------------------------------------------------------
 # Contradictory answers
 # ---------------------------------------------------------------------------

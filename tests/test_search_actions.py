@@ -41,6 +41,20 @@ def test_both_answers_are_available_and_strategic():
     assert context.D_yes and context.D_no
 
 
+def test_target_impossible_question_is_rejected_after_no():
+    state = SearchState.initial().ask(0, 1, "A1").answer(0, 1, "A1", False)
+
+    assert state.actor == 1
+    with pytest.raises(ValueError, match="target cannot own"):
+        state.ask(1, 0, "A1")
+
+
+def test_legal_question_always_has_a_yes_branch():
+    for question in SearchState.initial().legal_questions():
+        context = SearchState.initial().apply_question(question)
+        assert context.D_yes
+
+
 def test_forced_yes_and_forced_no():
     context = SearchState.initial().apply_question(
         QuestionMove(target=1, category=0, card=0)
