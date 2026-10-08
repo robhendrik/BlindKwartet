@@ -33,8 +33,23 @@ def _global_action_key(action) -> tuple[int, int, int, int]:
 class _GlobalSearch:
     """Small depth-limited Max-N search over stable global SearchStates."""
 
-    def __init__(self, solver: SingleCategorySolver) -> None:
+    def __init__(
+        self,
+        solver: SingleCategorySolver,
+        *,
+        diagnostics=None,
+        node_limit: int | None = None,
+        time_limit: float | None = None,
+    ) -> None:
+        if node_limit is not None and node_limit < 1:
+            raise ValueError("node_limit must be positive")
+        if time_limit is not None and time_limit <= 0:
+            raise ValueError("time_limit must be positive")
         self.solver = solver
+        self.diagnostics = diagnostics
+        self.node_limit = node_limit
+        self.time_limit = time_limit
+        self._started_at = time.perf_counter()
         self.nodes_expanded = 0
         self.leaf_evaluations = 0
         self.terminal_evaluations = 0
@@ -42,6 +57,18 @@ class _GlobalSearch:
 
     def evaluate_state(self, state: SearchState, depth: int) -> GlobalValueVector:
         self.nodes_expanded += 1
+        if self.diagnostics is not None:
+            self.diagnostics.record(state, depth)
+        if (
+            self.node_limit is not None
+            and self.nodes_expanded >= self.node_limit
+        ) or (
+            self.time_limit is not None
+            and time.perf_counter() - self._started_at >= self.time_limit
+        ):
+            from .global_search_diagnostics import GlobalSearchCutoff
+
+            raise GlobalSearchCutoff("diagnostic global search cutoff")
         if state.is_terminal:
             self.terminal_evaluations += 1
             return self._terminal_value(state)
