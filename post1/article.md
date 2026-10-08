@@ -9,7 +9,9 @@
 
 ## Kwartet Without Cards Always Ends in Confusion
 
-Imagine a card game in which no card exists. Not only does no one hold a physical card, but also what is actually on the virtual cards we play with is not yet defined. The cards are made up as you play. The rule is that you are not allowed to make a move that is inconsistent with what happened earlier in the game. A friend proposed this game when we were travelling with some fellow students to a physics conference in the mid-1990s. It was fun, but it always ended in confusion: after a few rounds it became almost impossible to track the history and determine what was still a legal move.
+Imagine a card game in which no card exists. Not only does no one hold a physical card, but also what is actually on the virtual cards we play with is not yet defined. The cards are made up as you play. The rule is that you are not allowed to make a move that is inconsistent with what happened earlier in the game. 
+
+A friend proposed this game when we were travelling with some fellow students to a physics conference in the mid-1990s. It was fun, but it always ended in confusion: after a few rounds it became almost impossible to track the history and determine what was still a legal move.
 
 The game is based on the Dutch children's game Kwartet, which is very similar to Go Fish. Players assemble the four cards of a category by asking other players for them. Once you have a complete category you say "Kwartet" and lay down the cards. When you ask for a card you have to be specific ("Can you give me Archimedes from the Greek mathematicians?"). If the other player has the card, it is handed over and you can ask again. If not, it is their turn. You may only ask for a card from a category in which you already hold a card, and never for a card you hold yourself.
 
