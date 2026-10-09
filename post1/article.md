@@ -19,7 +19,7 @@ To add to the confusion, we could never resist complicating the categories: if s
 
 ## Give the Blank Cards Secret Labels
 
-We can keep track of the game by giving each virtual card initially a label. Call the three categories A, B and C, and the cards A1 to A4, B1 to B4 and C1 to C4 (you could imagine that a printer had labelled the deck before the game). We then agree that the first category mentioned is category A, and that the first card in any category gets the label 1. In this situation the names the players invent ("Elementary particles", "Electron") are only entries in a notebook that matches the labels on the cards as the game evolves.
+We can keep track of the game by giving each virtual card initially a label. Call the three categories A, B and C, and the cards A1 to A4, B1 to B4 and C1 to C4 (you could imagine that a printer had labelled the deck before the game). We then agree that the first category mentioned is category A, and that the first card in any category gets the label 1. In this situation the names the players invent ("Elementary particles", "Electron") are only entries in a list that is matched to the labels on the cards as the game evolves.
 
 With these labels, the question "what is still possible?" becomes a question we can answer by assessing whether the game state is consistent with a valid initial state. We can take each possible initial state as a world: one complete deal of the twelve labelled cards: who holds which card at the start. With three players holding four cards each, there are 12! / (4!)³ = 34,650 ways to deal. In 618 of them somebody starts with a complete category, which the rules exclude, so 34,032 worlds remain. That is our multiverse: every deal consistent with the rules before the first question is asked. In each world the game then evolves as the players ask and answer questions, and as cards change owner.
 
@@ -29,38 +29,38 @@ Suppose both answers to a question are consistent with the history. The player w
 
 The referee is exact, but it keeps one bit for every world. For three players that is 34,032 bits. For four players and four categories of four it is 62,513,568, about 7.8 megabytes for a single state of the game. Most of these worlds differ only in names that nobody has invented yet.
 
-![Figure 1: the state of the game as one bit per world, with the notebook and the history of questions](./figures/figure1_state_as_bits.png)
-*Figure 1. The game after two questions: one bit per world, with the notebook and the history beside it.*
+![Figure 1: the state of the game as one bit per world, with the names so far and the history of questions](./figures/figure1_state_as_bits.png)
+*Figure 1. The game after two questions: one bit per world, with the names and the history beside it.*
 
 ## Why Distinguish Cards That Are Still Identical?
 
-Suppose Peter and Quinty each hold a card that did not get any label yet. If we swap the hidden labels of these two cards, we get a different world among the 34,032, but nothing in the game so far can tell the two apart. Both cards are still undefined, so the multiverse keeps two worlds apart for a difference that does not exist yet.
+Suppose Peter and Quinty each hold a card that did not get a name yet. If we swap the hidden labels of these two cards, we get a different world among the 34,032, but nothing in the game so far can tell the two apart. Both cards are still unnamed, so the multiverse keeps two worlds apart for a difference that does not exist yet.
 
-For each player and each category we only record how many cards that player started with. A hand then has one of three shapes: three cards of one category and one of another (3-1-0), two and two (2-2-0), or two, one and one (2-1-1). The three players together form a 3×3 table of counts, in which every row and column adds up to four and no entry is four. There are 87 such tables, against 34,032 worlds. A table counts cards without labelling them, so many different worlds share the same table.
+Now imagine we want to exploit the fact that unnamed cards should not lead to different worlds. For each player and each category we only record how many cards that player started with. A hand then has one of three shapes: three cards of one category and one of another (3-1-0), two and two (2-2-0), or two, one and one (2-1-1). The three players together form a 3×3 table of counts, in which every row and column adds up to four and no entry is four. There are 87 such tables, against 34,032 worlds. A table counts cards without labelling them, and that is exactly what the multiverse does not do: many different worlds share the same table.
 
-The counts say nothing about names, so those are tracked separately. When a card is asked for, it gets a name and a row in a second, small table: the naming matrix. For each named card it lists the players who could have held it at the start.
+The counts say nothing about names, so those are tracked separately. When a card is asked for, it gets a name and a row in the naming matrix, which lists for each named card the players who could have held it at the start.
 
-Figure 2 shows the game of Figure 1 in this form. After Peter's question about the electron (answered No) and Quinty's question about Newton, 42 of the 87 tables are still possible. The naming matrix has two rows. The electron started with Robin, because Peter asked for it and Quinty refused. Newton did not start with Quinty, because Quinty asked for it. Together they describe exactly the same 4,846 worlds as Figure 1.
+Figure 2 shows the game of Figure 1 in this form: the count tables and the naming matrix together are what we need to keep track of the game. We can call this a "notebook" we keep. After Peter's question about the electron (answered "No") and Quinty's question about Newton, 42 of the 87 tables are still possible. The naming matrix has two rows. The electron started with Robin, because Peter asked for it and Quinty refused. Newton did not start with Quinty, because Quinty asked for it. Together they describe exactly the same 4,846 worlds as the corresponding multiverse in Figure 1.
 
 ![Figure 2: the same game state as 87 bits for the count tables plus a naming matrix](./figures/figure2_compressed_state.png)
 *Figure 2. The game of Figure 1, compressed: one bit for each of the 87 count tables, plus a naming matrix. Each of the 42 lit tables has at least one world left.*
 
 Instead of 34,032 bits, about 4 kilobytes, the three-player game now needs 87 bits for the count tables and a few rows for the named cards: roughly fifteen bytes in total. With four players and four categories there are 8,515 count tables, so about a kilobyte, against 7.8 megabytes of worlds.
 
-But there is a caveat. In the multiverse a fifth name in a category of four is noticed at once, because no world survives. In the compressed state there are undefined cards that have yet to receive a category and a label, and it is not always possible to fit the names we have invented onto those open cards. We could create an unresolvable puzzle in one round, and only find out a few rounds later.
+But there is a caveat. In the multiverse a fifth name in a category of four is noticed at once, because no world survives. In the compressed state there are cards that have yet to receive a category and a name, and it is not always possible to fit the names we have invented onto those open cards. We could create an unresolvable puzzle in one round, and only find out a few rounds later.
 
 ## Locally Possible, Globally Impossible
 
-So, what is the challenge with the naming matrix? It captures the known names and the possible cards these can apply to. As opposed to the multiverse model, we do not assign a card name immediately to a blank card; we instead keep track of which positions can and cannot take this name.
+So, what is the challenge with the naming matrix? It captures the known names and the possible cards these can apply to. As opposed to the multiverse model, we do not assign a card name immediately to a blank card; we instead keep track of which places can and cannot take this name.
 
-As an example, we continue the game of Figure 1, with only No answers.
+As an example, we continue the game of Figure 1, with only "No" answers.
 
 1. Peter asks Quinty for the Electron from Elementary Particles. Quinty says No. We now know that the Electron is one of the cards in Robin's hand. (9,032 worlds are left.)
 2. Quinty asks Peter for Newton from Physicists. Peter says No. (Now Newton is also one of the cards in Robin's hand. 2,262 worlds are left.)
 3. Peter asks Quinty for the muon. No. (418 worlds.)
 4. Quinty asks Peter for the photon. No. (No world is left.)
 
-Each question seemed reasonable, and the notebook looks fine. Thirty-six count tables still satisfy what the questions require, and each of the four named cards still has a possible owner. But the final No made the whole history impossible. The electron, the muon and the photon can only be Robin's, since in each case one of Peter and Quinty asked and the other refused. Yet Peter and Quinty both asked for a particle, so each of them holds at least one. That makes five elementary particles in a category of four. In the language of the tables: three names, and at most two places for them at Robin. Figure 3 shows the clash.
+Each question seemed reasonable, and the notebook looks fine. Thirty-six count tables still satisfy what the questions require, and each of the four named cards still has a possible owner. But the final "No" made the whole history impossible. The electron, the muon and the photon can only be Robin's, since in each case one of Peter and Quinty asked and the other refused. Yet Peter and Quinty both asked for a particle, so each of them holds at least one. That makes five elementary particles in a category of four. In the language of the tables: three names, and at most two places for them at Robin. Figure 3 shows the clash.
 
 ![Figure 3: three names that can only be Robin's, and the two particle places Robin has left](./figures/figure3_names_and_places.png)
 *Figure 3. Every name still has somewhere to go, but together they do not fit.*
@@ -73,42 +73,38 @@ It turns out that this is a problem mathematicians solved almost a century ago.
 
 ## The Question Is a Marriage Problem in Disguise
 
-Can all the names we have invented be placed, one each, in the places that remain? It has a name, and a long history.
-
 Imagine a matchmaker with a group of people. Each person has a list of acceptable partners, and no two people can share a partner. Can everyone be matched at the same time? Our names are the people, our places are the partners, and the list of a name is the set of places where it is still allowed to sit.
 
 The matchmaker can fail in two ways. Someone's list may be empty, which is easy to see. Or a group may be too crowded: three people whose lists contain only the same two partners cannot all be matched, however long the other lists are. That is exactly what happened in Figure 3. The electron, the muon and the photon can only go to Robin, who has two places.
 
 > Checking whether a blind game is still possible is a marriage problem.
 
-In 1935 the mathematician Philip Hall proved that crowded groups are the only thing that can go wrong [4]. If every group of k people has, between them, at least k acceptable partners, then everyone can be matched. This is Hall's marriage theorem (Hall himself wrote about "representatives of subsets"; the marriage wording came later [6]). The link between blind kwartet and this theorem was made in an article in the Dutch magazine Pythagoras [1]. There is a recent paper on Hall’s theorem [5] which gives a recent overview.
+In 1935 the mathematician Philip Hall proved that crowded groups are the only thing that can go wrong [4]. If every group of *k* people has, between them, at least *k* acceptable partners, then everyone can be matched. This is Hall's marriage theorem (Hall himself wrote about "representatives of subsets"; the marriage wording came later [6]). The link between blind kwartet and this theorem was made in an article in the Dutch magazine Pythagoras [1]. There is a recent paper on Hall’s theorem [5] which gives a recent overview.
 
 The naming matrix tells us, for each name, which players may hold it, and a count table tells us how many places each player has in each category (a count of two means two interchangeable places). For one table we ask whether all names can be placed, category by category. Names that have not been invented yet simply take whatever places are left. If at least one surviving table passes, the game is still possible. If every table fails, it is not. In Figure 3 every table fails: the one shown is the most generous, and the others leave Robin even fewer places.
 
-Hall's condition seems to require checking every group of names, but efficient matching algorithms decide it quickly. They answer a yes-or-no question: does a placement exist? How many there are is a much harder problem. The multiverse kept track of every placement, one bit per world, but to referee the game we only need to know that one exists.
+Hall's condition seems to require checking every group of names, but efficient matching algorithms decide it quickly [5]. They answer a yes-or-no question: does a placement exist? How many there are is a much harder problem. The multiverse kept track of every placement, one bit per world, but to referee the game we only need to know that one exists.
 
 But did the compression, from 34,032 worlds to a few tables and one matrix, throw something away? Could the notebook say "possible" where the multiverse says "impossible", or the other way round?
 
 ## Nothing Is Lost by Not Remembering the Worlds
 
-The answer is no. Everything that is said in the game is of one of two kinds. It tells us something about how many cards of a category a player started with, or something about who could have started with a named card. It never mixes the two in one "either-or".
+Everything that is said in the game is of one of two kinds. It tells us something about how the categories could have been distributed over the players' hands (the counts), or something about which cards in those hands could have received a given name (the naming). It never mixes the two in one "either-or".
 
-Suppose Peter asks Quinty for the muon. This tells us two things: Peter holds another elementary particle (a statement about counts), and Peter does not hold the muon (a statement about owners). The two facts are joined by "and", never by "or". A Yes works the same way. A named card moves from one player to another, and everybody sees it, so the notebook shifts a known amount in the counts and records where the card came from. A statement such as "either Peter holds three particles or Quinty holds the muon" would tie counts and owners together and break the scheme, but the rules of the game never produce one.
+Suppose Peter asks Quinty for the muon. This tells us two things: Peter holds another elementary particle (a statement about counts), and Peter does not hold the muon (a statement about the naming). The two facts are joined by "and", never by "or". A "Yes" works the same way. A named card moves from one player to another, and everybody sees it, so the notebook shifts a known amount in the counts and records where the card came from. A statement such as "either Peter holds three particles or Quinty holds the muon" would tie the counts and the naming together and break the scheme, but the rules of the game never produce one.
 
-A world survives exactly when its count table is still allowed and every named card sits with a player who could have held it. The two parts of the notebook can be updated independently, but they have to agree, and Hall's theorem checks whether they do. All the rest is public bookkeeping: who gave what to whom, and whose turn it is.
-
-Announcing a quartet keeps only the worlds in which the player holds all four cards of that category, named or not. Continuing without announcing keeps only the worlds in which the player does not. Both are conditions on the counts and on the named cards.
+The two parts of the notebook can be updated independently, but they have to agree: a count table is only still possible if all the named cards fit into its places, and Hall's theorem checks exactly that. If they agree, the multiverse must have at least one surviving world. All the rest is public bookkeeping: who gave what to whom, and whose turn it is.
 
 <!-- TODO (Rob): add the result of the side-by-side test here (in particular for Yes answers, quartets and silence). -->
 
-That is a small notebook. Up to 87 bits for the count tables, at most 36 for the naming matrix (twelve cards, three players), plus the transfers and the turn: roughly 150 bits, instead of 34,032.
+The notebook is not large. It takes up to 87 bits for the count tables, at most 36 for the naming matrix (twelve cards, three players), plus the transfers and the turn: roughly 150 bits, instead of 34,032.
 
-We started by giving every card a hidden identity, and keeping track of all 34,032 ways those identities might have been distributed. We end with a notebook in which a card that has no name yet stays blank. That is allowed as long as Hall's theorem guarantees that we could fill the blanks in if we wanted to.
+We started by giving every card a hidden label, and keeping track of all 34,032 ways those labels might have been distributed. We end with a notebook in which a card that has no name yet stays blank. That is allowed as long as Hall's theorem guarantees that we could fill the blanks in if we wanted to.
 
 
 ## We Can Tell Whether a Move Is Legal. Which Move Is Best?
 
-We now have a referee that can say whether the story so far is possible, and it needs only a small notebook and a matching check. This check can also help us choose the best answer to a question. When someone is asked for a card, we can try both answers. If only one of them leaves a possible game, the answer is forced. If both do, the answerer has a real choice, and that is where strategy begins: a good player chooses the answer that keeps their own hopes alive and the others' hopes small.
+We now have a referee that can say whether the story so far is possible, and it needs only the notebook and a matching check applied to it. This referee can also help us choose the best answer to a question. When someone is asked for a card, we can try both answers. If only one of them leaves a possible game, the answer is forced. If both do, the answerer has a real choice, and that is where strategy begins: a good player chooses the answer that keeps their own hopes alive and the others' hopes small.
 
 So legality was only the first question. The next one is still open: is there a good way to play this game? Because we can now evaluate any state quickly, we can let a computer look ahead, question by question and answer by answer. That is where the next post begins.
 
