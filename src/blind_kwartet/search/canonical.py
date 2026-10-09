@@ -60,7 +60,7 @@ def canonicalize_reference(
     for transform in actor_normalized_transforms(normalized.actor):
         if normalized.D == ALL_DEAL_IDS_MASK:
             # D is invariant under every legal transform.  Enumerate the same
-            # full group, but avoid constructing 165,888 equivalent state
+            # full group, but avoid constructing 82,944 equivalent state
             # objects when only T can distinguish the keys.
             transformed_overrides = [NO_OVERRIDE] * TOTAL_CARDS
             for old_card, owner in enumerate(normalized.T):
@@ -145,7 +145,7 @@ def canonicalize(
 ) -> tuple[tuple[int, int], SymmetryTransform]:
     """Return the exact canonical key using the packed optimized path.
 
-    No candidate is discarded based on a signature: all 165,888 actor-
+    No candidate is discarded based on a signature: all 82,944 actor-
     normalized transforms are still compared with the complete exact key.
     This deliberately conservative first optimization establishes the fast
     representation and leaves future signature pruning semantics-safe.

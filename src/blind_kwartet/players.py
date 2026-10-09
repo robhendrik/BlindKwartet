@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import defaultdict
 import random
 from dataclasses import dataclass
 import time
 
 from .history import GameEvent, QuestionEvent
 from .category_projection import project_category_bitmap
-from .deals import CARDS_PER_CATEGORY, N_CATEGORIES
+from .deals import CARDS_PER_CATEGORY, INITIAL_OWNER_MASKS, N_CATEGORIES, N_PLAYERS
 from .moves import Action, AnswerMove, Move, QuestionMove, QuartetMove
 from .search_state import SearchState
 from .single_category_solver import (
@@ -22,6 +23,99 @@ from .single_category_solver import (
 
 GlobalPlayerValue = tuple[int, int, int, int, int]
 GlobalValueVector = tuple[GlobalPlayerValue, ...]
+
+
+@dataclass(frozen=True)
+class _SearchNaming:
+    """Minimal search-only naming history; never part of SearchState."""
+
+    categories: tuple[int, ...] = ()
+    cards: tuple[tuple[int, ...], ...] = ((), (), ())
+
+
+def _card_constraint_signature(state: SearchState, card: int) -> tuple[int, int, int]:
+    initial_mask = sum(
+        1 << player
+        for player in range(N_PLAYERS)
+        if INITIAL_OWNER_MASKS[player][card] & state.D
+    )
+    override = state.T[card]
+    current_mask = (
+        1 << override
+        if override >= 0
+        else initial_mask
+    )
+    return initial_mask, current_mask, override
+
+
+def _category_constraint_signature(state: SearchState, category: int):
+    start = category * CARDS_PER_CATEGORY
+    cards = tuple(
+        sorted(
+            _card_constraint_signature(state, start + offset)
+            for offset in range(CARDS_PER_CATEGORY)
+        )
+    )
+    holder = state.quartet_holders()[category]
+    return (category in state.resolved_categories, holder, cards)
+
+
+def _infer_search_naming(state: SearchState) -> _SearchNaming:
+    """Infer named slots from non-generic exact constraints at a search root."""
+    generic = (7, 7, -1)
+    categories = []
+    cards = [[], [], []]
+    for category in range(N_CATEGORIES):
+        for offset in range(CARDS_PER_CATEGORY):
+            card = category * CARDS_PER_CATEGORY + offset
+            if _card_constraint_signature(state, card) != generic:
+                cards[category].append(card)
+                if category not in categories:
+                    categories.append(category)
+        if category in state.resolved_categories and category not in categories:
+            categories.append(category)
+    return _SearchNaming(tuple(categories), tuple(tuple(row) for row in cards))
+
+
+def _advance_search_naming(
+    naming: _SearchNaming, move: QuestionMove
+) -> _SearchNaming:
+    categories = list(naming.categories)
+    cards = [list(row) for row in naming.cards]
+    if move.category not in categories:
+        categories.append(move.category)
+    if move.card not in cards[move.category]:
+        cards[move.category].append(move.card)
+    return _SearchNaming(tuple(categories), tuple(tuple(row) for row in cards))
+
+
+def semantic_question_representatives(
+    state: SearchState,
+    questions: tuple[QuestionMove, ...] | list[QuestionMove],
+    naming: _SearchNaming | None = None,
+) -> tuple[QuestionMove, ...]:
+    """Return one exact representative for each local naming-symmetry class.
+
+    Targets are part of the class key.  Named category/card slots are never
+    exchanged with new slots; otherwise equal exact constraints are compared
+    structurally, without invoking compressed keys or full-state transforms.
+    """
+    naming = _infer_search_naming(state) if naming is None else naming
+    classes: dict[tuple[object, ...], QuestionMove] = {}
+    for move in questions:
+        if move.category in naming.categories:
+            category_key = ("named-category", move.category)
+        else:
+            category_key = ("new-category", _category_constraint_signature(state, move.category))
+        if move.card in naming.cards[move.category]:
+            card_key = ("named-card", move.card)
+        else:
+            card_key = ("new-card", _card_constraint_signature(state, move.card))
+        key = (move.target, category_key, card_key)
+        current = classes.get(key)
+        if current is None or (move.category, move.card) < (current.category, current.card):
+            classes[key] = move
+    return tuple(sorted(classes.values(), key=_global_action_key))
 
 
 def _global_action_key(action) -> tuple[int, int, int, int]:
@@ -40,6 +134,7 @@ class _GlobalSearch:
         diagnostics=None,
         node_limit: int | None = None,
         time_limit: float | None = None,
+        move_symmetry_pruning: bool = True,
     ) -> None:
         if node_limit is not None and node_limit < 1:
             raise ValueError("node_limit must be positive")
@@ -49,11 +144,41 @@ class _GlobalSearch:
         self.diagnostics = diagnostics
         self.node_limit = node_limit
         self.time_limit = time_limit
+        self.move_symmetry_pruning = move_symmetry_pruning
         self._started_at = time.perf_counter()
         self.nodes_expanded = 0
         self.leaf_evaluations = 0
         self.terminal_evaluations = 0
         self.max_branching_factor = 0
+        self.raw_legal_questions = 0
+        self.semantic_question_classes = 0
+        self.pruned_equivalent_questions = 0
+        self.question_branching_by_depth: dict[int, dict[str, int]] = defaultdict(
+            lambda: {
+                "raw_legal_questions": 0,
+                "semantic_question_classes": 0,
+                "pruned_equivalent_questions": 0,
+            }
+        )
+
+    @property
+    def branching_reduction_percent(self) -> float:
+        if not self.raw_legal_questions:
+            return 0.0
+        return 100.0 * self.pruned_equivalent_questions / self.raw_legal_questions
+
+    @property
+    def symmetry_diagnostics(self) -> dict[str, object]:
+        return {
+            "raw_legal_questions": self.raw_legal_questions,
+            "semantic_question_classes": self.semantic_question_classes,
+            "pruned_equivalent_questions": self.pruned_equivalent_questions,
+            "branching_reduction_percent": self.branching_reduction_percent,
+            "by_depth": {
+                depth: dict(values)
+                for depth, values in sorted(self.question_branching_by_depth.items())
+            },
+        }
 
     def evaluate_state(self, state: SearchState, depth: int) -> GlobalValueVector:
         self.nodes_expanded += 1
@@ -74,13 +199,52 @@ class _GlobalSearch:
             return self._terminal_value(state)
         if depth <= 0:
             self.leaf_evaluations += 1
-            return self._leaf_value(state)
+            started = time.perf_counter()
+            value = self._leaf_value(state)
+            if self.diagnostics is not None:
+                record_leaf_cost = getattr(self.diagnostics, "record_leaf_cost", None)
+                if record_leaf_cost is not None:
+                    record_leaf_cost(time.perf_counter() - started)
+            return value
 
-        actions = self._ordered_actions(state.legal_moves())
+        exact_actions = state.legal_moves()
+        questions = tuple(action for action in exact_actions if isinstance(action, QuestionMove))
+        if self.move_symmetry_pruning:
+            naming = _infer_search_naming(state)
+            semantic_questions = semantic_question_representatives(state, questions, naming)
+        else:
+            semantic_questions = questions
+        raw_count = len(questions)
+        semantic_count = len(semantic_questions)
+        pruned_count = raw_count - semantic_count
+        self.raw_legal_questions += raw_count
+        self.semantic_question_classes += semantic_count
+        self.pruned_equivalent_questions += pruned_count
+        depth_stats = self.question_branching_by_depth[depth]
+        depth_stats["raw_legal_questions"] += raw_count
+        depth_stats["semantic_question_classes"] += semantic_count
+        depth_stats["pruned_equivalent_questions"] += pruned_count
+        other_actions = tuple(action for action in exact_actions if not isinstance(action, QuestionMove))
+        actions = self._ordered_actions((*semantic_questions, *other_actions))
         self.max_branching_factor = max(self.max_branching_factor, len(actions))
         if not actions:
-            return self._leaf_value(state)
-        values = [self._evaluate_action(state, action, depth) for action in actions]
+            started = time.perf_counter()
+            value = self._leaf_value(state)
+            if self.diagnostics is not None:
+                record_leaf_cost = getattr(self.diagnostics, "record_leaf_cost", None)
+                if record_leaf_cost is not None:
+                    record_leaf_cost(time.perf_counter() - started)
+            return value
+        values = [
+            self._evaluate_action(
+                state,
+                action,
+                depth,
+                _advance_search_naming(naming, action)
+                if isinstance(action, QuestionMove) else naming,
+            )
+            for action in actions
+        ]
         actor = state.actor
         best_index = max(
             range(len(values)),
@@ -94,7 +258,13 @@ class _GlobalSearch:
         action,
         depth: int,
     ) -> GlobalValueVector:
-        return self._evaluate_action(state, action, depth)
+        return self._evaluate_action(
+            state,
+            action,
+            depth,
+            _advance_search_naming(_infer_search_naming(state), action)
+            if isinstance(action, QuestionMove) else _infer_search_naming(state),
+        )
 
     def evaluate_answer_branches(
         self,
@@ -115,10 +285,16 @@ class _GlobalSearch:
             return AnswerMove(True), yes_value, no_value
         return AnswerMove(False), yes_value, no_value
 
-    def _evaluate_action(self, state: SearchState, action, depth: int) -> GlobalValueVector:
+    def _evaluate_action(
+        self,
+        state: SearchState,
+        action,
+        depth: int,
+        naming: _SearchNaming,
+    ) -> GlobalValueVector:
         if isinstance(action, QuartetMove):
             successor = state.apply_quartet(action).resolve_forced_quartets()
-            return self.evaluate_state(successor, depth - 1)
+            return self._evaluate_state_with_naming(successor, depth - 1, naming)
         context = state.apply_question(action)
         answer, yes_value, no_value = self.evaluate_answer_branches(
             context,
@@ -128,6 +304,12 @@ class _GlobalSearch:
         # The branch values were already evaluated while selecting the
         # answer; do not expand the selected successor a second time.
         return yes_value if answer.yes else no_value  # type: ignore[return-value]
+
+    def _evaluate_state_with_naming(
+        self, state: SearchState, depth: int, naming: _SearchNaming
+    ) -> GlobalValueVector:
+        """Recursive entry retaining naming metadata outside SearchState."""
+        return self._evaluate_state_impl(state, depth, naming)
 
     @staticmethod
     def _answer_successor(context, answer: AnswerMove) -> SearchState:

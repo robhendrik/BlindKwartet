@@ -24,10 +24,19 @@ IDENTITY_CARDS = (tuple(range(4)),) * 3
 
 def test_actor_normalized_group_has_exact_size_and_actor_zero_result():
     transforms = actor_normalized_transforms(0)
-    assert len(transforms) == 165_888
+    assert len(transforms) == 82_944
     state = SearchState.initial()
     for transform in (transforms[0], transforms[-1]):
         assert transform.transform_state(state).actor == 0
+
+
+def test_actor_normalization_preserves_cyclic_seat_order():
+    for actor in range(3):
+        transform = actor_normalized_transforms(actor)[0]
+        assert transform.player_perm[actor] == 0
+        assert transform.player_perm[(actor + 1) % 3] == 1
+        assert transform.player_perm[(actor + 2) % 3] == 2
+        assert transform.transform_state(SearchState.initial(actor)).actor == 0
 
 
 def test_card_transform_uses_old_category_before_category_move():
@@ -58,7 +67,7 @@ def test_transform_state_round_trip_and_popcount():
     assert transform_state(transformed, transform.inverse()) == state.normalize_overrides()
 
 
-def test_player_category_and_card_symmetries_share_one_canonical_key():
+def test_category_and_card_symmetries_share_one_canonical_key_but_reflection_does_not():
     # Keep D complete so this symmetry regression isolates the non-redundant
     # public T mapping and remains practical for the deliberately exhaustive
     # reference canonicalizer.
@@ -73,10 +82,11 @@ def test_player_category_and_card_symmetries_share_one_canonical_key():
     )
     combined = player_swap.compose(category_swap).compose(card_swap)
     expected = canonical_key(state)
-    assert canonical_key(transform_state(state, player_swap)) == expected
+    # Swapping the two non-actor seats is the forbidden seat reflection.
+    assert canonical_key(transform_state(state, player_swap)) != expected
     assert canonical_key(transform_state(state, category_swap)) == expected
     assert canonical_key(transform_state(state, card_swap)) == expected
-    assert canonical_key(transform_state(state, combined)) == expected
+    assert canonical_key(transform_state(state, combined)) != expected
 
 
 def test_move_round_trip_including_old_category_rank_mapping():
@@ -146,3 +156,19 @@ def test_optimized_canonicalizer_matches_reference_on_reachable_prefixes():
     for prefix in (0,):
         state = Game.replay(result.history[:prefix])
         assert canonicalize(state)[0] == canonicalize_reference(state)[0]
+
+
+def test_canonicalization_is_idempotent_and_valid_transforms_are_equivalent():
+    state = replace(
+        SearchState.initial(actor=2),
+        possible_initial_deals=(1 << 0) | (1 << 1) | (1 << 4),
+        current_owner_override=(1, NO_OVERRIDE, 2) + (NO_OVERRIDE,) * 9,
+    )
+    canonical, _ = canonical_state(state)
+    assert canonical.actor == 0
+    assert canonical_key(canonical) == canonical_key(state)
+    valid = SymmetryTransform(
+        (2, 0, 1), (1, 2, 0),
+        ((3, 0, 1, 2), (1, 2, 3, 0), (2, 3, 0, 1)),
+    )
+    assert canonical_key(transform_state(state, valid)) == canonical_key(state)

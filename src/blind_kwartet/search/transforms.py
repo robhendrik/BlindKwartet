@@ -248,13 +248,22 @@ def transform_move(move: Move, transform: SymmetryTransform) -> Move:
 
 @lru_cache(maxsize=3)
 def actor_normalized_transforms(actor: int) -> tuple[SymmetryTransform, ...]:
-    """Enumerate exactly the 165,888 transforms sending ``actor`` to zero."""
+    """Enumerate valid transforms sending ``actor`` to canonical P1.
+
+    The other seats are assigned in cyclic order: the next physical seat is
+    canonical P2 and the last seat is canonical P3.  The former second
+    assignment (which swapped those two seats) was a reflection and is not a
+    game symmetry.  The resulting group has
+    ``3! * (4!) ** 3 == 82_944`` members.
+    """
     if actor not in range(N_PLAYERS):
         raise ValueError("invalid actor")
-    player_perms = tuple(
-        tuple(0 if old == actor else 1 + remaining.index(old)
-              for old in range(N_PLAYERS))
-        for remaining in permutations(tuple(old for old in range(N_PLAYERS) if old != actor))
+    next_seat = (actor + 1) % N_PLAYERS
+    player_perms = (
+        tuple(
+            0 if old == actor else 1 if old == next_seat else 2
+            for old in range(N_PLAYERS)
+        ),
     )
     category_perms = tuple(permutations(range(N_CATEGORIES)))
     card_perms = tuple(permutations(range(CARDS_PER_CATEGORY)))
