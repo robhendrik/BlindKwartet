@@ -108,7 +108,7 @@ We started by giving every card a hidden identity, and keeping track of all 34,0
 
 ## We Can Tell Whether a Move Is Legal. Which Move Is Best?
 
-We now have a referee that can say whether the story so far is possible, and it needs only a small notebook and a matching check. This check can also help us choose the best answer to a question. When someone is asked for a card, we can try both answers. If only one of them leaves a possible game, the answer is forced. If both do, the answerer has a real choice, and that is where strategy begins: a good player chooses the answer that keeps their own hopes alive and the others' hopes small.
+We now have a referee that can say whether the game history so far is possible, and it needs only a small notebook and a matching check for card names. This check can also help us choose the best answer to a question. When someone is asked for a card, we can try both answers. If only one of them leaves a possible game, the answer is forced. If both do, the answerer has a real choice, and that is where strategy begins: a good player chooses the answer that keeps their own hopes alive and the others' hopes small.
 
 So legality was only the first question. The next one is still open: is there a good way to play this game? Because we can now evaluate any state quickly, we can let a computer look ahead, question by question and answer by answer. That is where the next post begins.
 
