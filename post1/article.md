@@ -131,4 +131,4 @@ The mathematics
 
 4. Philip Hall, "[On representatives of subsets](https://londmathsoc.onlinelibrary.wiley.com/doi/epdf/10.1112/jlms/s1-10.37.26)", Journal of the London Mathematical Society 10 (1935), 26-30.
 5. Peter J. Cameron, "Hall's marriage theorem", [arXiv:2503.23159](https://arxiv.org/abs/2503.23159), March 2025. 
-6. Paul Halmos and Herbert Vaughan, "The marriage problem", American Journal of Mathematics, 1950. 
+6. Paul Halmos and Herbert Vaughan, "The marriage problem", American Journal of Mathematics, 1950.   
