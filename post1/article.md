@@ -1,9 +1,31 @@
+<!--
+METADATA
+date: 2026-10-09
+revision: 1
+
+medium:
+  topics:
+    - Mathematics
+    - Games
+    - Combinatorics
+    - Algorithms
+    - Quantum Physics
+  seo_title: "A Card Game With Cards That Don't Exist (Yet)"
+  seo_description: "A blind version of the children's game kwartet has 34,032 possible worlds. Keeping track of them leads to Hall's marriage theorem from 1935."
+  preview_title: "A Card Game With Cards That Don't Exist (Yet)"
+  preview_subtitle: "How do you keep track of a game whose cards are made up as you play?"
+  publication: "Science Spectrum"
+  canonical_url: "none"
+-->
+
 # A Card Game With Cards That Don't Exist (Yet)
 
-*A blind version of the children's game kwartet has 34,032 possible worlds. Keeping track of them leads to a marriage theorem from 1935.*
+### A blind version of the children's game kwartet has 34,032 possible worlds. Keeping track of them leads to a marriage theorem from 1935.
 
-![Feature image: a hand of cards, one named Electron, three still blank](./figures/feature_image.png)
-*Feature image: four cards, one of which has just received its name.*
+![Feature_image](Feature_image.png)
+> Caption: **Feature image: four cards, one of which has just received its name.**
+> Alt text: A fan of four playing cards on a dark reflective surface. One card is face up and reads Electron, elementary particles. The other three show only a question mark.
+> Source: Image generated with PyVista by author.
 
 ## Kwartet Without Cards Always Ends in Confusion
 
@@ -29,8 +51,10 @@ Suppose both answers to a question are consistent with the history. The player w
 
 The referee is exact, but it keeps one bit for every world. For three players that is 34,032 bits. For four players and four categories of four it is 62,513,568, about 7.8 megabytes for a single state of the game. Most of these worlds differ only in names that nobody has invented yet.
 
-![Figure 1: the state of the game as one bit per world, with the names so far and the history of questions](./figures/figure1_state_as_bits.png)
-*Figure 1. The game after two questions: one bit per world, with the names and the history beside it.*
+![Figure_1](Figure_1.png)
+> Caption: **Figure 1: The game after two questions: one bit per world, with the names and the history beside it.**
+> Alt text: A large dark rectangle of 34,032 small squares, one per world, with yellow squares marking the 4,846 worlds that are still possible. Beside it are a legend, a grid of card labels A1 to C4 in which only Electron and Newton have a name, and a history of two questions.
+> Source: Image by author.
 
 ## Why Distinguish Cards That Are Still Identical?
 
@@ -42,8 +66,10 @@ The counts say nothing about names, so those are tracked separately. When a card
 
 Figure 2 shows the game of Figure 1 in this form: the count tables and the naming matrix together are what we need to keep track of the game. We can call this a "notebook" we keep. After Peter's question about the electron (answered "No") and Quinty's question about Newton, 42 of the 87 tables are still possible. The naming matrix has two rows. The electron started with Robin, because Peter asked for it and Quinty refused. Newton did not start with Quinty, because Quinty asked for it. Together they describe exactly the same 4,846 worlds as the corresponding multiverse in Figure 1.
 
-![Figure 2: the same game state as 87 bits for the count tables plus a naming matrix](./figures/figure2_compressed_state.png)
-*Figure 2. The game of Figure 1, compressed: one bit for each of the 87 count tables, plus a naming matrix. Each of the 42 lit tables has at least one world left.*
+![Figure_2](Figure_2.png)
+> Caption: **Figure 2: The game of Figure 1, compressed: one bit for each of the 87 count tables, plus a naming matrix. Each of the 42 lit tables has at least one world left.**
+> Alt text: Three panels. On the left, a grid of 87 squares with 42 lit yellow for the count tables still possible and one of them framed. In the middle, a naming matrix with rows for Electron and Newton and columns for Peter, Quinty and Robin, marking who could have held each card. On the right, the framed count table with players as rows and categories A, B and C as columns, in which every row and column adds up to four.
+> Source: Image by author.
 
 Instead of 34,032 bits, about 4 kilobytes, the three-player game now needs 87 bits for the count tables and a few rows for the named cards: roughly fifteen bytes in total. With four players and four categories there are 8,515 count tables, so about a kilobyte, against 7.8 megabytes of worlds.
 
@@ -62,12 +88,14 @@ As an example, we continue the game of Figure 1, with only "No" answers.
 
 Each question seemed reasonable, and the notebook looks fine. Thirty-six count tables still satisfy what the questions require, and each of the four named cards still has a possible owner. But the final "No" made the whole history impossible. The electron, the muon and the photon can only be Robin's, since in each case one of Peter and Quinty asked and the other refused. Yet Peter and Quinty both asked for a particle, so each of them holds at least one. That makes five elementary particles in a category of four. In the language of the tables: three names, and at most two places for them at Robin. Figure 3 shows the clash.
 
-![Figure 3: three names that can only be Robin's, and the two particle places Robin has left](./figures/figure3_names_and_places.png)
-*Figure 3. Every name still has somewhere to go, but together they do not fit.*
+![Figure_3](Figure_3.png)
+> Caption: **Figure 3: Every name still has somewhere to go, but together they do not fit.**
+> Alt text: The names Electron, Muon and Photon, each linked to two boxes labelled Robin, place 1 and Robin, place 2. Boxes for Peter and Quinty are crossed out as not possible. A bracket beside Robin's boxes reads 3 names, 2 places.
+> Source: Image by author.
 
 This example is easy to see because everything happens in one category and with one player. With more categories and more cards, names and constraints are interleaved, and an unresolvable state can go unnoticed until much later, or even until the end. Only when we compare all names with all places together does the clash show.
 
-> Every name has somewhere to go. The question is whether they all fit at once.
+> ***Every name has somewhere to go. The question is whether they all fit at once.***
 
 It turns out that this is a problem mathematicians solved almost a century ago.
 
@@ -77,7 +105,7 @@ Imagine a matchmaker with a group of people. Each person has a list of acceptabl
 
 The matchmaker can fail in two ways. Someone's list may be empty, which is easy to see. Or a group may be too crowded: three people whose lists contain only the same two partners cannot all be matched, however long the other lists are. That is exactly what happened in Figure 3. The electron, the muon and the photon can only go to Robin, who has two places.
 
-> Checking whether a blind game is still possible is a marriage problem.
+> ***Checking whether a blind game is still possible is a marriage problem.***
 
 In 1935 the mathematician Philip Hall proved that crowded groups are the only thing that can go wrong [4]. If every group of *k* people has, between them, at least *k* acceptable partners, then everyone can be matched. This is Hall's marriage theorem (Hall himself wrote about "representatives of subsets"; the marriage wording came later [6]). The link between blind kwartet and this theorem was made in an article in the Dutch magazine Pythagoras [1]. There is a recent paper on Hall’s theorem [5] which gives a recent overview.
 
