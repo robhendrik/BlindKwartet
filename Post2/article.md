@@ -4,9 +4,8 @@
 
 ![Feature_image](Feature_image.png)
 > Caption: **Feature image: the same position after two public events. A search one, two or three exchanges deep asks three different questions.**
-> Alt text: Three arrows leave one and the same game position. Each is labelled with a search depth, and each ends at a different question: P1 for A2, P1 for B1, and P3 for A1.
-> Source: Image by author.
-<!-- TODO (Rob): alt text assumes the feature image is the depth 1/2/3 fork at the 9,032-world position. Adjust if the final image is different. -->
+> Alt text: Four cards stand on a dark reflective surface. The card on the left reads A1, NO, position. Three amber arcs of increasing height lead from it to three other cards: A2? P1 (depth 1), B1? P1 (depth 2) and A1? P3 (depth 3).
+> Source: Image generated with PyVista by author.
 
 ## From Referee to Player
 
@@ -59,9 +58,11 @@ Introduce the three outcomes:
 The important message is that this is not a heuristic. Within one category, it is exact.
 
 ![Figure_1](Figure_1.gif)
-> Caption: **Figure 1: One category, as the notebook sees it (animated). Each cell asks whether a player could hold a card right now, and the 81 squares are the possible ownerships. Every answer switches off the worlds it contradicts, down to the single world left when P3 announces Kwartet. Nothing was dealt in advance; the table only records what has been said.**
-> Alt text: An animation of a table with rows P1, P2 and P3 and columns A1 to A4, next to a nine by nine grid of 81 squares. Each cell shows a question mark, a cross or the word holds. As the game goes on, the lit squares shrink from 81 to one, and P3 ends up holding all four cards.
-> Source: Animation by author.
+> Caption: **Figure 1: One category of four cards, played by three players. The game is written out as seven moves, and the animation follows the same moves in the notebook. Each cell asks whether a player could hold a card right now, and the 81 squares are the possible ownerships. A NO passes the turn and rules out one owner; a YES moves the card to the asker, who keeps the turn. Nothing was dealt in advance, the notebook only records what has been said, and after move 6 a single world is left, which P3's Kwartet confirms.**
+> Alt text: Two parts of one figure. The first lists the game as seven numbered moves, from "Move 1: P1 asks P2 for A1, P2 answers No" to "Move 7: P3 announces Kwartet", with each player's name in that player's colour. The second is an animation of a table with rows P1, P2 and P3 and columns A1 to A4, next to a nine by nine grid of 81 squares, with the current move printed above the table. Each cell shows a question mark, a cross or the word holds. As the moves go on, the lit squares shrink from 81 to one, and P3 ends up holding all four cards.
+> Source: Image and animation by author.
+
+Walk through the game of Figure 1 and stop at move 3. After moves 1 and 2, P2 has the turn, but he is a kingmaker: whoever he asks can answer NO and so takes the initiative to finish the category. In the example he asks P3 for A2, P3 answers NO, and P3 then runs the table: moves 4 to 6 collect the cards, and move 7 announces the Kwartet. This is the first hint that having the turn is worth more than holding cards, and it comes back when the categories start to interact.
 
 ## A Surprisingly Strong Local Player
 
@@ -75,11 +76,11 @@ Present the empirical surprise: this simple local player already performs very w
 
 This should feel like the apparent breakthrough in the story: perhaps the hard global problem can be sidestepped by solving the local pieces exactly.
 
+![Figure_2](Figure_2_moves.png)
 ![Figure_2](Figure_2.png)
-> Caption: **Figure 2: The local player. Each category is handed on its own to the single-category solver, which labels every legal question WIN, OPEN or LOSS. The player takes the best label over all categories and breaks ties by a fixed rule. No category knows anything about the others.**
-> Alt text: Three columns for the categories A, B and C. Each lists a few candidate questions with a WIN, OPEN or LOSS label. One arrow from the best question in each column leads to a single chosen question.
+> Caption: **Figure 2: Three categories, played with the local strategy. The game is written out as fifteen moves, and each dot in the lanes is one of those moves, placed in the category it plays in. A filled dot is a YES, so the same player asks again; a ring is a NO, so the turn passes; an amber line marks a switch of category, and K a Kwartet. P1 finishes A, then B, then C, and wins with three quartets. P2 gets the turn only twice and hears NO each time, and P3 never gets to ask.**
+> Alt text: Two parts of one figure. The first lists the game as fifteen numbered moves under the title “Categories A, B and C: the game”, from “Move 1: P1 asks P2 for A1, P2 answers No” to “Move 15: P1 announces Kwartet C”, with each player’s name in that player’s colour. The second shows three horizontal lanes labelled Category A, B and C, with numbered dots for the moves. Dots 1 to 5 and a green K square sit in lane A, dots 7 to 11 and a K in lane B, and dots 13 and 14 and a K in lane C, so the moves step down from the top left to the bottom right. Amber lines join the last K of each lane to the first dot of the next lane. Most dots are filled purple. Dots 1 and 7 are purple rings and dots 2 and 8 are teal rings. A legend below explains filled dots, rings, amber lines and the player colours.
 > Source: Image by author.
-<!-- TODO (Rob): check the alt text against the final figure. -->
 
 ## The Catch: Categories Interact
 

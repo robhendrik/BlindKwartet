@@ -10,6 +10,7 @@ Run from the repository root, for example::
 from __future__ import annotations
 
 import argparse
+import json
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +84,7 @@ class AllTreeObservation:
     first_singleton_event: int | None
     state_graph: StateGraph
     answer_diagnostics: tuple[tuple[int, TreeDecisionDiagnostic], ...] = ()
+    question_diagnostics: tuple[tuple[int, TreeDecisionDiagnostic], ...] = ()
 
     @property
     def event_limit_reached(self) -> bool:
@@ -109,6 +111,7 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500, global_depth: 
     last_category = [None, None, None]
     diagnostic_indices = [0, 0, 0]
     answer_diagnostics: list[tuple[int, TreeDecisionDiagnostic]] = []
+    question_diagnostics: list[tuple[int, TreeDecisionDiagnostic]] = []
     graph_states = [state]
     graph_ids = {state: 0}
     graph_trajectory = [0]
@@ -137,6 +140,7 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500, global_depth: 
             diagnostic_indices[seat] += 1
             question_decisions[seat] += 1
             assert diagnostic.action_kind == "question"
+            question_diagnostics.append((event_number, diagnostic))
             label = (
                 diagnostic.selected_outcome.name
                 if diagnostic.selected_outcome is not None
@@ -175,12 +179,18 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500, global_depth: 
             pending_has_strategic_answer = False
             states.append(state)
         elif isinstance(event, QuartetEvent):
-            state = state.apply_quartet(QuartetMove(event.category))
+            holder = state.quartet_holders()[event.category]
+            forced = holder is not None
+            if forced:
+                assert holder == event.player
+            else:
+                state = state.apply_quartet(QuartetMove(event.category))
             add_graph_transition(state, event_number, f"P{event.player + 1} declares quartet {chr(ord('A') + event.category)}")
             seat = event.player
-            diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
-            diagnostic_indices[seat] += 1
-            assert diagnostic.action_kind == "quartet"
+            if not forced:
+                diagnostic = players[seat].decision_diagnostics[diagnostic_indices[seat]]
+                diagnostic_indices[seat] += 1
+                assert diagnostic.action_kind == "quartet"
             states.append(state)
         else:
             raise TypeError(event)
@@ -235,6 +245,7 @@ def run_all_tree_game(*, seed: int = 123, event_limit: int = 500, global_depth: 
         first_singleton_event=singleton_event,
         state_graph=state_graph,
         answer_diagnostics=tuple(answer_diagnostics),
+        question_diagnostics=tuple(question_diagnostics),
     )
 
 
@@ -440,6 +451,7 @@ def print_all_tree_observation(
     *,
     verbose: bool = False,
     answer_diagnostics: bool = False,
+    question_diagnostics: bool = False,
 ) -> None:
     result = observation.result
     print("All-tree game")
@@ -507,6 +519,22 @@ def print_all_tree_observation(
                 f"NO={diagnostic.no_outcome.name if diagnostic.no_outcome else '-'} "
                 f"-> {selected} ({reason})"
             )
+    if question_diagnostics:
+        print("Question diagnostics (category-local best values)")
+        for event_number, diagnostic in observation.question_diagnostics:
+            values = ", ".join(
+                f"{chr(65 + category)}={outcome.name}"
+                for category, outcome in diagnostic.category_best_values
+            ) or "(none)"
+            selected = diagnostic.selected_outcome.name if diagnostic.selected_outcome else "GLOBAL"
+            print(f"event {event_number}: category options: {values}; selected={selected}")
+    quartet_events = sum(isinstance(event, QuartetEvent) for event in result.history)
+    if sum(result.seat_scores) != quartet_events:
+        print(
+            f"WARNING: scores imply {sum(result.seat_scores)} quartets, "
+            f"but history records {quartet_events} QuartetEvents. "
+            "Cannot safely reconstruct missing declarations from this benchmark."
+        )
     if verbose:
         print("Transcript")
         for event_number, event in enumerate(result.history, start=1):
@@ -557,7 +585,47 @@ def write_state_graph(observation: AllTreeObservation, output_stem: str) -> tupl
     return dot_path, image_path
 
 
-def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plot_state_graph: bool, state_graph_output: str, answer_diagnostics: bool = False, global_depth: int = 0) -> None:
+def export_figure_game(observation: AllTreeObservation, path: str) -> None:
+    """Export only events actually recorded by Game; never invent quartets."""
+    moves = []
+    pending = None
+    for event in observation.result.history:
+        if isinstance(event, QuestionEvent):
+            if pending is not None:
+                raise ValueError("Question without previous answer")
+            pending = {
+                "asker": f"P{event.asker + 1}",
+                "respondent": f"P{event.target + 1}",
+                "card": f"{chr(65 + event.category)}{event.card - 4 * event.category + 1}",
+            }
+        elif isinstance(event, AnswerEvent):
+            if pending is None:
+                raise ValueError("Answer without question")
+            moves.append({**pending, "answer": "YES" if event.yes else "NO"})
+            pending = None
+        elif isinstance(event, QuartetEvent):
+            moves.append({
+                "kwartet": f"P{event.player + 1}",
+                "category": chr(65 + event.category),
+            })
+    if pending is not None:
+        raise ValueError("Unanswered final question")
+    data = {
+        "players": ["P1", "P2", "P3"],
+        "cards": [f"{category}{i}" for category in "ABC" for i in range(1, 5)],
+        "moves": moves,
+        "scores": list(observation.result.seat_scores),
+        "end_reason": observation.result.end_reason,
+        "quartet_events_complete": sum(isinstance(e, QuartetEvent) for e in observation.result.history)
+                                   == sum(observation.result.seat_scores),
+    }
+    Path(path).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {path}")
+    if not data["quartet_events_complete"]:
+        print("WARNING: exported history omits quartets not recorded by the engine.")
+
+
+def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plot_state_graph: bool, state_graph_output: str, answer_diagnostics: bool = False, global_depth: int = 0, question_diagnostics: bool = False, export_figure_json: str | None = None) -> None:
     observations = [
         run_all_tree_game(seed=seed, event_limit=event_limit, global_depth=global_depth)
         for _ in range(repeat)
@@ -568,7 +636,10 @@ def run_all_tree(*, seed: int, event_limit: int, repeat: int, verbose: bool, plo
             observation,
             verbose=verbose,
             answer_diagnostics=answer_diagnostics,
+            question_diagnostics=question_diagnostics,
         )
+        if export_figure_json and index == 1:
+            export_figure_game(observation, export_figure_json)
         if plot_state_graph and index == 1:
             write_state_graph(observation, state_graph_output)
     trajectories = [
@@ -590,6 +661,8 @@ def main() -> None:
     parser.add_argument("--plot-state-graph", action="store_true", help="write and render the exact all-tree state graph")
     parser.add_argument("--state-graph-output", default="all_tree_cycle", help="DOT output stem")
     parser.add_argument("--answer-diagnostics", action="store_true", help="print strategic answer branch values")
+    parser.add_argument("--question-diagnostics", action="store_true", help="show best local outcome for each category at question decisions")
+    parser.add_argument("--export-figure-json", help="export first all-tree history as figure JSON (recorded events only)")
     parser.add_argument("--global-depth", type=int, default=0, help="stable global lookahead depth")
     args = parser.parse_args()
     if args.games <= 0 or args.event_limit < 0 or args.repeat <= 0 or args.global_depth < 0:
@@ -604,6 +677,8 @@ def main() -> None:
             state_graph_output=args.state_graph_output,
             answer_diagnostics=args.answer_diagnostics,
             global_depth=args.global_depth,
+            question_diagnostics=args.question_diagnostics,
+            export_figure_json=args.export_figure_json,
         )
     else:
         run_benchmark(args.games, args.seed, args.event_limit, args.global_depth)

@@ -82,6 +82,14 @@ class Game:
         if choice not in actions:
             raise IllegalMove(f"player chose an illegal {phase}: {choice!r}")
 
+    def _record_forced_quartets(self, previous: SearchState) -> None:
+        """Log newly certain quartets without applying them a second time."""
+        newly_resolved = self.state.resolved_categories - previous.resolved_categories
+        for category in sorted(newly_resolved):
+            holder = self.state.quartet_holders()[category]
+            assert holder is not None
+            self._history.append(QuartetEvent(holder, category))
+
     def run(self) -> GameResult:
         """Run until terminal or the defensive event limit is reached."""
         if self._result is not None:
@@ -132,13 +140,21 @@ class Game:
                         answer.yes,
                     )
                 )
+                previous = self.state
                 self.state = context.apply_answer(answer)
+                self._record_forced_quartets(previous)
             elif isinstance(choice, QuartetMove):
                 if self._event_limit_reached():
                     self._result = self._result_for("event_limit")
                     return self._result
                 self._history.append(QuartetEvent(actor, choice.category))
+                previous = self.state
                 self.state = self.state.apply_quartet(choice)
+                # The explicit declaration was already appended above.
+                for category in sorted(self.state.resolved_categories - previous.resolved_categories - {choice.category}):
+                    holder = self.state.quartet_holders()[category]
+                    assert holder is not None
+                    self._history.append(QuartetEvent(holder, category))
             else:
                 raise IllegalMove(f"unsupported stable action: {choice!r}")
 
@@ -178,9 +194,15 @@ class Game:
             elif isinstance(event, QuartetEvent):
                 if pending is not None:
                     raise ValueError("quartet before previous answer")
-                if event.player != state.actor:
-                    raise ValueError("quartet event has the wrong actor")
-                state = state.apply_quartet(QuartetMove(event.category))
+                holder = state.quartet_holders()[event.category]
+                if holder is not None:
+                    # A forced declaration acknowledges an already certain quartet.
+                    if holder != event.player:
+                        raise ValueError("forced quartet event has the wrong holder")
+                else:
+                    if event.player != state.actor:
+                        raise ValueError("quartet event has the wrong actor")
+                    state = state.apply_quartet(QuartetMove(event.category))
             else:
                 raise TypeError(f"unknown game event: {event!r}")
         if pending is not None:

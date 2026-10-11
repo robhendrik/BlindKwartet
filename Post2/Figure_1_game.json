@@ -1,0 +1,14 @@
+{
+  "category": "A",
+  "players": ["P1", "P2", "P3"],
+  "cards": ["A1", "A2", "A3", "A4"],
+  "moves": [
+    {"asker": "P1", "respondent": "P2", "card": "A1", "answer": "NO"},
+    {"asker": "P2", "respondent": "P3", "card": "A1", "answer": "YES"},
+    {"asker": "P2", "respondent": "P3", "card": "A2", "answer": "NO"},
+    {"asker": "P3", "respondent": "P1", "card": "A2", "answer": "YES"},
+    {"asker": "P3", "respondent": "P2", "card": "A1", "answer": "YES"},
+    {"asker": "P3", "respondent": "P2", "card": "A3", "answer": "YES"},
+    {"kwartet": "P3"}
+  ]
+}

@@ -1,0 +1,404 @@
+{
+  "title": "Level 2 example: three categories, local strategy",
+  "level": 2,
+  "source": {
+    "label": "All-tree game",
+    "run": "1/1",
+    "repeated_runs_identical": true
+  },
+  "categories": [
+    "A",
+    "B",
+    "C"
+  ],
+  "players": [
+    "P1",
+    "P2",
+    "P3"
+  ],
+  "cards": [
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "B1",
+    "B2",
+    "B3",
+    "B4",
+    "C1",
+    "C2",
+    "C3",
+    "C4"
+  ],
+  "selection_rule": "Local strategy: each category is judged on its own by the exact single-category solver; the best value over the open categories is played, ties broken deterministically. No multi-category search tree.",
+  "example_initial_deal_for_validation": {
+    "P1": [
+      "A4",
+      "B4",
+      "C3",
+      "C4"
+    ],
+    "P2": [
+      "A3",
+      "B3",
+      "C1",
+      "C2"
+    ],
+    "P3": [
+      "A1",
+      "A2",
+      "B1",
+      "B2"
+    ]
+  },
+  "deal_note": "Not part of the run output. Reconstructed from the moves (the three quartets force it) and used only to validate them; never shown to readers.",
+  "result": {
+    "scores": [
+      3,
+      0,
+      0
+    ],
+    "winners": [
+      "P1"
+    ],
+    "events": 27,
+    "end_reason": "terminal",
+    "event_limit_hit": false,
+    "final_D": 1,
+    "first_D_equals_1_event": 14
+  },
+  "player_stats": {
+    "P1": {
+      "questions": 10,
+      "strategic_answers": 2,
+      "WIN": 8,
+      "OPEN": 0,
+      "LOSS": 2,
+      "GLOBAL": 0,
+      "first_WIN_event": 5,
+      "category_switches": 2,
+      "solver_nodes": 713,
+      "memo_hits": 2320,
+      "cycle_hits": 0
+    },
+    "P2": {
+      "questions": 2,
+      "strategic_answers": 2,
+      "WIN": 0,
+      "OPEN": 0,
+      "LOSS": 2,
+      "GLOBAL": 0,
+      "first_WIN_event": null,
+      "category_switches": 1,
+      "solver_nodes": 932,
+      "memo_hits": 2961,
+      "cycle_hits": 0
+    },
+    "P3": {
+      "questions": 0,
+      "strategic_answers": 0,
+      "WIN": 0,
+      "OPEN": 0,
+      "LOSS": 0,
+      "GLOBAL": 0,
+      "first_WIN_event": null,
+      "category_switches": 0,
+      "solver_nodes": 0,
+      "memo_hits": 0,
+      "cycle_hits": 0
+    }
+  },
+  "strategic_answers": {
+    "strict_yes": 0,
+    "strict_no": 2,
+    "ties": 2,
+    "tie_no": 2
+  },
+  "state_graph": {
+    "nodes": 13,
+    "edges": 15,
+    "repeated_exact_SearchStates": 3,
+    "distinct_SearchStates": 13,
+    "first_repeat_state": "S5",
+    "cycle_entry_event": 10,
+    "cycle_length": 1,
+    "cycle_states": [
+      "S5"
+    ]
+  },
+  "moves": [
+    {
+      "move": 1,
+      "events": [
+        1,
+        2
+      ],
+      "state_from": "S0",
+      "state_to": "S1",
+      "asker": "P1",
+      "respondent": "P2",
+      "card": "A1",
+      "answer": "NO",
+      "category_options": {
+        "A": "LOSS",
+        "B": "LOSS",
+        "C": "LOSS"
+      },
+      "selected_value": "LOSS",
+      "answer_diagnostics": {
+        "YES": "LOSS",
+        "NO": "LOSS",
+        "chosen": "NO",
+        "kind": "tie"
+      }
+    },
+    {
+      "move": 2,
+      "events": [
+        3,
+        4
+      ],
+      "state_from": "S1",
+      "state_to": "S2",
+      "asker": "P2",
+      "respondent": "P1",
+      "card": "A2",
+      "answer": "NO",
+      "category_options": {
+        "A": "LOSS",
+        "B": "LOSS",
+        "C": "LOSS"
+      },
+      "selected_value": "LOSS",
+      "answer_diagnostics": {
+        "YES": "LOSS",
+        "NO": "WIN",
+        "chosen": "NO",
+        "kind": "strict"
+      }
+    },
+    {
+      "move": 3,
+      "events": [
+        5,
+        6
+      ],
+      "state_from": "S2",
+      "state_to": "S3",
+      "asker": "P1",
+      "respondent": "P2",
+      "card": "A3",
+      "answer": "YES",
+      "category_options": {
+        "A": "WIN",
+        "B": "LOSS",
+        "C": "LOSS"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 4,
+      "events": [
+        7,
+        8
+      ],
+      "state_from": "S3",
+      "state_to": "S4",
+      "asker": "P1",
+      "respondent": "P3",
+      "card": "A1",
+      "answer": "YES",
+      "category_options": {
+        "A": "WIN",
+        "B": "LOSS",
+        "C": "LOSS"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 5,
+      "events": [
+        9,
+        10
+      ],
+      "state_from": "S4",
+      "state_to": "S5",
+      "asker": "P1",
+      "respondent": "P3",
+      "card": "A2",
+      "answer": "YES",
+      "category_options": {
+        "A": "WIN",
+        "B": "LOSS",
+        "C": "LOSS"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 6,
+      "events": [
+        11
+      ],
+      "state_from": "S5",
+      "state_to": "S5",
+      "kwartet": "P1",
+      "category": "A"
+    },
+    {
+      "move": 7,
+      "events": [
+        12,
+        13
+      ],
+      "state_from": "S5",
+      "state_to": "S6",
+      "asker": "P1",
+      "respondent": "P2",
+      "card": "B1",
+      "answer": "NO",
+      "category_options": {
+        "B": "LOSS",
+        "C": "LOSS"
+      },
+      "selected_value": "LOSS",
+      "answer_diagnostics": {
+        "YES": "LOSS",
+        "NO": "LOSS",
+        "chosen": "NO",
+        "kind": "tie"
+      }
+    },
+    {
+      "move": 8,
+      "events": [
+        14,
+        15
+      ],
+      "state_from": "S6",
+      "state_to": "S7",
+      "asker": "P2",
+      "respondent": "P1",
+      "card": "B2",
+      "answer": "NO",
+      "category_options": {
+        "B": "LOSS",
+        "C": "LOSS"
+      },
+      "selected_value": "LOSS",
+      "answer_diagnostics": {
+        "YES": "LOSS",
+        "NO": "WIN",
+        "chosen": "NO",
+        "kind": "strict"
+      }
+    },
+    {
+      "move": 9,
+      "events": [
+        16,
+        17
+      ],
+      "state_from": "S7",
+      "state_to": "S8",
+      "asker": "P1",
+      "respondent": "P2",
+      "card": "B3",
+      "answer": "YES",
+      "category_options": {
+        "B": "WIN",
+        "C": "WIN"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 10,
+      "events": [
+        18,
+        19
+      ],
+      "state_from": "S8",
+      "state_to": "S9",
+      "asker": "P1",
+      "respondent": "P3",
+      "card": "B1",
+      "answer": "YES",
+      "category_options": {
+        "B": "WIN",
+        "C": "WIN"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 11,
+      "events": [
+        20,
+        21
+      ],
+      "state_from": "S9",
+      "state_to": "S10",
+      "asker": "P1",
+      "respondent": "P3",
+      "card": "B2",
+      "answer": "YES",
+      "category_options": {
+        "B": "WIN",
+        "C": "WIN"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 12,
+      "events": [
+        22
+      ],
+      "state_from": "S10",
+      "state_to": "S10",
+      "kwartet": "P1",
+      "category": "B"
+    },
+    {
+      "move": 13,
+      "events": [
+        23,
+        24
+      ],
+      "state_from": "S10",
+      "state_to": "S11",
+      "asker": "P1",
+      "respondent": "P2",
+      "card": "C1",
+      "answer": "YES",
+      "category_options": {
+        "C": "WIN"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 14,
+      "events": [
+        25,
+        26
+      ],
+      "state_from": "S11",
+      "state_to": "S12",
+      "asker": "P1",
+      "respondent": "P2",
+      "card": "C2",
+      "answer": "YES",
+      "category_options": {
+        "C": "WIN"
+      },
+      "selected_value": "WIN"
+    },
+    {
+      "move": 15,
+      "events": [
+        27
+      ],
+      "state_from": "S12",
+      "state_to": "S12",
+      "kwartet": "P1",
+      "category": "C"
+    }
+  ]
+}
