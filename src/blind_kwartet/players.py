@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import defaultdict
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
 
 from .history import GameEvent, QuestionEvent
@@ -180,7 +180,39 @@ class _GlobalSearch:
             },
         }
 
+    def search_actions(
+        self,
+        state: SearchState,
+        actions: tuple[Action, ...] | list[Action],
+        depth: int = 0,
+        naming: _SearchNaming | None = None,
+    ) -> tuple[Action, ...]:
+        """Quotient exact supplied actions for search expansion only."""
+        exact_questions = tuple(action for action in actions if isinstance(action, QuestionMove))
+        naming = _infer_search_naming(state) if naming is None else naming
+        semantic_questions = (
+            semantic_question_representatives(state, exact_questions, naming)
+            if self.move_symmetry_pruning else exact_questions
+        )
+        raw_count = len(exact_questions)
+        semantic_count = len(semantic_questions)
+        pruned_count = raw_count - semantic_count
+        self.raw_legal_questions += raw_count
+        self.semantic_question_classes += semantic_count
+        self.pruned_equivalent_questions += pruned_count
+        depth_stats = self.question_branching_by_depth[depth]
+        depth_stats["raw_legal_questions"] += raw_count
+        depth_stats["semantic_question_classes"] += semantic_count
+        depth_stats["pruned_equivalent_questions"] += pruned_count
+        other_actions = tuple(action for action in actions if not isinstance(action, QuestionMove))
+        return self._ordered_actions((*semantic_questions, *other_actions))
+
     def evaluate_state(self, state: SearchState, depth: int) -> GlobalValueVector:
+        return self._evaluate_state_impl(state, depth, _infer_search_naming(state))
+
+    def _evaluate_state_impl(
+        self, state: SearchState, depth: int, naming: _SearchNaming
+    ) -> GlobalValueVector:
         self.nodes_expanded += 1
         if self.diagnostics is not None:
             self.diagnostics.record(state, depth)
@@ -208,24 +240,7 @@ class _GlobalSearch:
             return value
 
         exact_actions = state.legal_moves()
-        questions = tuple(action for action in exact_actions if isinstance(action, QuestionMove))
-        if self.move_symmetry_pruning:
-            naming = _infer_search_naming(state)
-            semantic_questions = semantic_question_representatives(state, questions, naming)
-        else:
-            semantic_questions = questions
-        raw_count = len(questions)
-        semantic_count = len(semantic_questions)
-        pruned_count = raw_count - semantic_count
-        self.raw_legal_questions += raw_count
-        self.semantic_question_classes += semantic_count
-        self.pruned_equivalent_questions += pruned_count
-        depth_stats = self.question_branching_by_depth[depth]
-        depth_stats["raw_legal_questions"] += raw_count
-        depth_stats["semantic_question_classes"] += semantic_count
-        depth_stats["pruned_equivalent_questions"] += pruned_count
-        other_actions = tuple(action for action in exact_actions if not isinstance(action, QuestionMove))
-        actions = self._ordered_actions((*semantic_questions, *other_actions))
+        actions = self.search_actions(state, exact_actions, depth, naming)
         self.max_branching_factor = max(self.max_branching_factor, len(actions))
         if not actions:
             started = time.perf_counter()
@@ -271,16 +286,20 @@ class _GlobalSearch:
         context,
         answerer: int,
         remaining_depth: int,
+        naming: _SearchNaming | None = None,
     ) -> tuple[AnswerMove, GlobalValueVector, GlobalValueVector | None]:
         legal_answers = context.legal_answers()
         if len(legal_answers) == 1:
             successor = self._answer_successor(context, legal_answers[0])
-            value = self.evaluate_state(successor, remaining_depth)
+            value = self._evaluate_state_with_naming(
+                successor, remaining_depth, naming or _infer_search_naming(successor)
+            )
             return legal_answers[0], value, None
         yes = self._answer_successor(context, AnswerMove(True))
         no = self._answer_successor(context, AnswerMove(False))
-        yes_value = self.evaluate_state(yes, remaining_depth)
-        no_value = self.evaluate_state(no, remaining_depth)
+        active_naming = naming or _infer_search_naming(context.state)
+        yes_value = self._evaluate_state_with_naming(yes, remaining_depth, active_naming)
+        no_value = self._evaluate_state_with_naming(no, remaining_depth, active_naming)
         if yes_value[answerer] > no_value[answerer]:
             return AnswerMove(True), yes_value, no_value
         return AnswerMove(False), yes_value, no_value
@@ -300,6 +319,7 @@ class _GlobalSearch:
             context,
             action.target,
             depth - 1,
+            naming,
         )
         # The branch values were already evaluated while selecting the
         # answer; do not expand the selected successor a second time.
@@ -309,6 +329,11 @@ class _GlobalSearch:
         self, state: SearchState, depth: int, naming: _SearchNaming
     ) -> GlobalValueVector:
         """Recursive entry retaining naming metadata outside SearchState."""
+        # Preserve the existing monkeypatch/test seam while retaining the
+        # structured naming context on normal recursive search calls.
+        patched_evaluate_state = self.__dict__.get("evaluate_state")
+        if patched_evaluate_state is not None:
+            return patched_evaluate_state(state, depth)
         return self._evaluate_state_impl(state, depth, naming)
 
     @staticmethod
@@ -381,6 +406,11 @@ class TreeDecisionDiagnostic:
     global_leaf_evaluations: int = 0
     global_terminal_evaluations: int = 0
     global_max_branching_factor: int = 0
+    global_raw_legal_questions: int = 0
+    global_semantic_question_classes: int = 0
+    global_pruned_equivalent_questions: int = 0
+    global_branching_reduction_percent: float = 0.0
+    global_symmetry_by_depth: dict[int, dict[str, int]] = field(default_factory=dict)
     selected_global_value: GlobalPlayerValue | None = None
     competing_global_values: tuple[tuple[str, GlobalPlayerValue], ...] = ()
     global_runtime_ms: float | None = None
@@ -518,6 +548,11 @@ class SingleCategoryTreePlayer(Player):
                     global_leaf_evaluations=0 if global_search is None else global_search.leaf_evaluations,
                     global_terminal_evaluations=0 if global_search is None else global_search.terminal_evaluations,
                     global_max_branching_factor=0 if global_search is None else global_search.max_branching_factor,
+                    global_raw_legal_questions=0 if global_search is None else global_search.raw_legal_questions,
+                    global_semantic_question_classes=0 if global_search is None else global_search.semantic_question_classes,
+                    global_pruned_equivalent_questions=0 if global_search is None else global_search.pruned_equivalent_questions,
+                    global_branching_reduction_percent=0.0 if global_search is None else global_search.branching_reduction_percent,
+                    global_symmetry_by_depth={} if global_search is None else global_search.symmetry_diagnostics["by_depth"],
                     selected_global_value=selected_global_value,
                     competing_global_values=competing_global_values,
                     global_runtime_ms=global_runtime_ms,
@@ -601,7 +636,9 @@ class SingleCategoryTreePlayer(Player):
         if self.global_depth > 0:
             start = time.perf_counter()
             global_search = _GlobalSearch(self.solver)
-            ordered_actions = _GlobalSearch._ordered_actions(legal_moves)
+            ordered_actions = global_search.search_actions(
+                view.state, legal_moves, self.global_depth
+            )
             evaluations_global = tuple(
                 (
                     move,
