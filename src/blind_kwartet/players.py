@@ -135,6 +135,7 @@ class _GlobalSearch:
         node_limit: int | None = None,
         time_limit: float | None = None,
         move_symmetry_pruning: bool = True,
+        memo_enabled: bool = True,
     ) -> None:
         if node_limit is not None and node_limit < 1:
             raise ValueError("node_limit must be positive")
@@ -145,7 +146,15 @@ class _GlobalSearch:
         self.node_limit = node_limit
         self.time_limit = time_limit
         self.move_symmetry_pruning = move_symmetry_pruning
+        self.memo_enabled = memo_enabled
+        self.memo: dict[tuple[object, ...], GlobalValueVector] = {}
         self._started_at = time.perf_counter()
+        self.search_calls = 0
+        self.memo_lookups = 0
+        self.memo_hits = 0
+        self.memo_misses = 0
+        self.memo_hits_by_depth: dict[int, int] = defaultdict(int)
+        self.memo_entries_by_depth: dict[int, int] = defaultdict(int)
         self.nodes_expanded = 0
         self.leaf_evaluations = 0
         self.terminal_evaluations = 0
@@ -166,6 +175,45 @@ class _GlobalSearch:
         if not self.raw_legal_questions:
             return 0.0
         return 100.0 * self.pruned_equivalent_questions / self.raw_legal_questions
+
+    @property
+    def memo_entries(self) -> int:
+        return len(self.memo)
+
+    @property
+    def memo_hit_rate(self) -> float:
+        if not self.memo_lookups:
+            return 0.0
+        return self.memo_hits / self.memo_lookups
+
+    @property
+    def runtime_ms(self) -> float:
+        return (time.perf_counter() - self._started_at) * 1000
+
+    def clear_memo(self) -> None:
+        """Clear cached recursive results before an independent top-level search."""
+        self.memo.clear()
+        self.memo_hits_by_depth.clear()
+        self.memo_entries_by_depth.clear()
+
+    @staticmethod
+    def _naming_signature(naming: _SearchNaming) -> tuple[tuple[int, ...], tuple[tuple[int, ...], ...]]:
+        """Return all naming data that can affect semantic move pruning."""
+        return naming.categories, naming.cards
+
+    def _memo_key(
+        self, state: SearchState, depth: int, naming: _SearchNaming
+    ) -> tuple[object, ...]:
+        # SearchState successors are normalized by the authoritative transition
+        # methods.  Keep D and every T slot exact; no projection or relabelling
+        # is safe here.  Naming is included because it changes representatives.
+        return (
+            state.D,
+            state.T,
+            state.actor,
+            depth,
+            self._naming_signature(naming),
+        )
 
     @property
     def symmetry_diagnostics(self) -> dict[str, object]:
@@ -213,6 +261,17 @@ class _GlobalSearch:
     def _evaluate_state_impl(
         self, state: SearchState, depth: int, naming: _SearchNaming
     ) -> GlobalValueVector:
+        self.search_calls += 1
+        key = None
+        if self.memo_enabled:
+            key = self._memo_key(state, depth, naming)
+            self.memo_lookups += 1
+            cached = self.memo.get(key)
+            if cached is not None:
+                self.memo_hits += 1
+                self.memo_hits_by_depth[depth] += 1
+                return cached
+            self.memo_misses += 1
         self.nodes_expanded += 1
         if self.diagnostics is not None:
             self.diagnostics.record(state, depth)
@@ -228,7 +287,11 @@ class _GlobalSearch:
             raise GlobalSearchCutoff("diagnostic global search cutoff")
         if state.is_terminal:
             self.terminal_evaluations += 1
-            return self._terminal_value(state)
+            value = self._terminal_value(state)
+            if key is not None:
+                self.memo[key] = value
+                self.memo_entries_by_depth[depth] += 1
+            return value
         if depth <= 0:
             self.leaf_evaluations += 1
             started = time.perf_counter()
@@ -237,6 +300,9 @@ class _GlobalSearch:
                 record_leaf_cost = getattr(self.diagnostics, "record_leaf_cost", None)
                 if record_leaf_cost is not None:
                     record_leaf_cost(time.perf_counter() - started)
+            if key is not None:
+                self.memo[key] = value
+                self.memo_entries_by_depth[depth] += 1
             return value
 
         exact_actions = state.legal_moves()
@@ -249,6 +315,9 @@ class _GlobalSearch:
                 record_leaf_cost = getattr(self.diagnostics, "record_leaf_cost", None)
                 if record_leaf_cost is not None:
                     record_leaf_cost(time.perf_counter() - started)
+            if key is not None:
+                self.memo[key] = value
+                self.memo_entries_by_depth[depth] += 1
             return value
         values = [
             self._evaluate_action(
@@ -265,7 +334,11 @@ class _GlobalSearch:
             range(len(values)),
             key=lambda index: values[index][actor],
         )
-        return values[best_index]
+        value = values[best_index]
+        if key is not None:
+            self.memo[key] = value
+            self.memo_entries_by_depth[depth] += 1
+        return value
 
     def evaluate_action(
         self,
@@ -411,6 +484,14 @@ class TreeDecisionDiagnostic:
     global_pruned_equivalent_questions: int = 0
     global_branching_reduction_percent: float = 0.0
     global_symmetry_by_depth: dict[int, dict[str, int]] = field(default_factory=dict)
+    global_search_calls: int = 0
+    global_memo_lookups: int = 0
+    global_memo_hits: int = 0
+    global_memo_misses: int = 0
+    global_memo_entries: int = 0
+    global_memo_hit_rate: float = 0.0
+    global_memo_hits_by_depth: dict[int, int] = field(default_factory=dict)
+    global_memo_entries_by_depth: dict[int, int] = field(default_factory=dict)
     selected_global_value: GlobalPlayerValue | None = None
     competing_global_values: tuple[tuple[str, GlobalPlayerValue], ...] = ()
     global_runtime_ms: float | None = None
@@ -553,6 +634,14 @@ class SingleCategoryTreePlayer(Player):
                     global_pruned_equivalent_questions=0 if global_search is None else global_search.pruned_equivalent_questions,
                     global_branching_reduction_percent=0.0 if global_search is None else global_search.branching_reduction_percent,
                     global_symmetry_by_depth={} if global_search is None else global_search.symmetry_diagnostics["by_depth"],
+                    global_search_calls=0 if global_search is None else global_search.search_calls,
+                    global_memo_lookups=0 if global_search is None else global_search.memo_lookups,
+                    global_memo_hits=0 if global_search is None else global_search.memo_hits,
+                    global_memo_misses=0 if global_search is None else global_search.memo_misses,
+                    global_memo_entries=0 if global_search is None else global_search.memo_entries,
+                    global_memo_hit_rate=0.0 if global_search is None else global_search.memo_hit_rate,
+                    global_memo_hits_by_depth={} if global_search is None else dict(sorted(global_search.memo_hits_by_depth.items())),
+                    global_memo_entries_by_depth={} if global_search is None else dict(sorted(global_search.memo_entries_by_depth.items())),
                     selected_global_value=selected_global_value,
                     competing_global_values=competing_global_values,
                     global_runtime_ms=global_runtime_ms,
