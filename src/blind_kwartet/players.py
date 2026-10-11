@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import time
 
 from .history import GameEvent, QuestionEvent
-from .category_projection import project_category_bitmap
+from .category_projection import ProjectionDiagnostics, project_category_bitmap
 from .deals import CARDS_PER_CATEGORY, INITIAL_OWNER_MASKS, N_CATEGORIES, N_PLAYERS
 from .moves import Action, AnswerMove, Move, QuestionMove, QuartetMove
 from .search_state import SearchState
@@ -136,6 +136,8 @@ class _GlobalSearch:
         time_limit: float | None = None,
         move_symmetry_pruning: bool = True,
         memo_enabled: bool = True,
+        projection_backend: str = "python",
+        projection_diagnostics: ProjectionDiagnostics | None = None,
     ) -> None:
         if node_limit is not None and node_limit < 1:
             raise ValueError("node_limit must be positive")
@@ -147,6 +149,10 @@ class _GlobalSearch:
         self.time_limit = time_limit
         self.move_symmetry_pruning = move_symmetry_pruning
         self.memo_enabled = memo_enabled
+        if projection_backend not in {"python", "numpy", "numba"}:
+            raise ValueError("projection_backend must be 'python', 'numpy', or 'numba'")
+        self.projection_backend = projection_backend
+        self.projection_diagnostics = projection_diagnostics
         self.memo: dict[tuple[object, ...], GlobalValueVector] = {}
         self._started_at = time.perf_counter()
         self.search_calls = 0
@@ -420,7 +426,16 @@ class _GlobalSearch:
             for category in range(3):
                 if category in state.resolved_categories:
                     continue
-                bitmap = project_category_bitmap(state, category, player)
+                if self.projection_backend == "python" and self.projection_diagnostics is None:
+                    bitmap = project_category_bitmap(state, category, player)
+                else:
+                    bitmap = project_category_bitmap(
+                        state,
+                        category,
+                        player,
+                        backend=self.projection_backend,
+                        diagnostics=self.projection_diagnostics,
+                    )
                 local_actor = (state.actor - player) % 3
                 outcome = self.solver.solve(bitmap, local_actor).outcome
                 if outcome is CategoryOutcome.WIN:

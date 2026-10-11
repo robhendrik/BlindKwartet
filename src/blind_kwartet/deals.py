@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import combinations
 
+import numpy as np
+
 N_PLAYERS = 3
 N_CATEGORIES = 3
 CARDS_PER_CATEGORY = 4
@@ -72,6 +74,14 @@ if len(INITIAL_DEALS) != 34_032:  # pragma: no cover - import-time invariant
 
 ALL_DEAL_IDS_MASK = (1 << len(INITIAL_DEALS)) - 1
 
+# Exact materialized view of the authoritative InitialDeal tuples.  This is
+# deliberately not a new state representation: SearchState.D remains the
+# authoritative surviving-world bitmask and this table only avoids repeatedly
+# traversing Python dataclass/tuple objects in category projection.
+INITIAL_OWNER = np.asarray(
+    [deal.owner_by_card for deal in INITIAL_DEALS], dtype=np.uint8
+)
+
 # INITIAL_OWNER_MASKS[player][card] has bit deal_id set when that player
 # initially owns that card.
 INITIAL_OWNER_MASKS = tuple(
@@ -92,7 +102,7 @@ def deal_ids(bitset: int) -> tuple[int, ...]:
 
 __all__ = [
     "ALL_DEAL_IDS_MASK", "CARDS", "CARD_INDEX", "CARDS_PER_CATEGORY",
-    "INITIAL_DEALS", "INITIAL_OWNER_MASKS", "InitialDeal",
+    "INITIAL_DEALS", "INITIAL_OWNER", "INITIAL_OWNER_MASKS", "InitialDeal",
     "N_CATEGORIES", "N_PLAYERS", "TOTAL_CARDS", "deal_ids",
     "enumerate_initial_deals",
 ]

@@ -1,5 +1,9 @@
+import numpy as np
+import pytest
+
 from blind_kwartet.category_projection import project_category_bitmap
-from blind_kwartet.deals import INITIAL_DEALS
+from blind_kwartet.deals import INITIAL_DEALS, INITIAL_OWNER
+from blind_kwartet.search_state import NO_OVERRIDE
 from blind_kwartet.search_state import SearchState
 from blind_kwartet.single_category_solver import decode_world, world_bit
 
@@ -19,6 +23,54 @@ def state_with_category(category_owners_value, category=0):
 
 def projected_worlds(bitmap):
     return {decode_world(index) for index in range(81) if bitmap & (1 << index)}
+
+
+def backend_states():
+    initial = SearchState.initial()
+    a1_no = initial.ask(0, 1, "A1").answer(0, 1, "A1", False)
+    transfer = initial.ask(0, 1, "A1").answer(0, 1, "A1", True)
+    transfer = transfer.ask(0, 1, "A2").answer(0, 1, "A2", True)
+    resolved = state_with_category((0, 0, 0, 0))
+    late = SearchState(
+        1 << INITIAL_DEALS[1234].deal_id,
+        (1, NO_OVERRIDE, 2, NO_OVERRIDE, 0, NO_OVERRIDE, 1, NO_OVERRIDE,
+         2, NO_OVERRIDE, 0, NO_OVERRIDE),
+        2,
+    )
+    return (initial, a1_no, transfer, resolved, late)
+
+
+def test_initial_owner_table_matches_authoritative_deals():
+    assert INITIAL_OWNER.shape == (len(INITIAL_DEALS), 12)
+    assert INITIAL_OWNER.dtype == np.uint8
+    assert np.array_equal(
+        INITIAL_OWNER,
+        np.asarray([deal.owner_by_card for deal in INITIAL_DEALS], dtype=np.uint8),
+    )
+    for deal_id in (0, 1, 1234, 17016, len(INITIAL_DEALS) - 1):
+        assert tuple(int(owner) for owner in INITIAL_OWNER[deal_id]) == INITIAL_DEALS[deal_id].owner_by_card
+
+
+def test_numpy_projection_matches_reference_on_reachable_and_exact_states():
+    for state in backend_states():
+        for category in range(3):
+            for active_player in range(3):
+                assert project_category_bitmap(state, category, active_player) == project_category_bitmap(
+                    state, category, active_player, backend="numpy"
+                )
+
+
+def test_numba_projection_matches_reference_when_available():
+    try:
+        project_category_bitmap(SearchState.initial(), 0, 0, backend="numba")
+    except RuntimeError:
+        pytest.skip("numba unavailable")
+    for state in backend_states():
+        for category in range(3):
+            for active_player in range(3):
+                assert project_category_bitmap(state, category, active_player) == project_category_bitmap(
+                    state, category, active_player, backend="numba"
+                )
 
 
 def test_fully_known_category_projects_to_one_normalized_world():
