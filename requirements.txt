@@ -8,6 +8,8 @@ pyvista
 
 # OpenAI API
 openai
+requests
+beautifulsoup4
 
 # Testing
 pytest
