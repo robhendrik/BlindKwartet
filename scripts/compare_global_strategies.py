@@ -111,9 +111,9 @@ class PolicyResult:
     candidates: list[dict[str, Any]]
 
 
-def _global_result(view: PlayerView, depth: int) -> PolicyResult:
+def _global_result(view: PlayerView, depth: int, projection_backend: str = "python") -> PolicyResult:
     started = time.perf_counter()
-    search = _GlobalSearch(SingleCategorySolver())
+    search = _GlobalSearch(SingleCategorySolver(), projection_backend=projection_backend)
     if any(isinstance(action, AnswerMove) for action in view.legal_actions):
         question_event = next(
             event for event in reversed(view.history) if isinstance(event, QuestionEvent)
@@ -147,6 +147,7 @@ def _global_result(view: PlayerView, depth: int) -> PolicyResult:
     elapsed_ms = (time.perf_counter() - started) * 1000
     diagnostics = {
         "depth": depth,
+        "projection_backend": projection_backend,
         "selected_move": format_move(choice),
         "returned_value": _json_value(value),
         "nodes_expanded": search.nodes_expanded,
@@ -164,10 +165,17 @@ def _global_result(view: PlayerView, depth: int) -> PolicyResult:
 class ComparisonPlayer(Player):
     """Evaluate every configured policy and return only the driver move."""
 
-    def __init__(self, driver: str, depths: tuple[int, ...], records: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        driver: str,
+        depths: tuple[int, ...],
+        records: list[dict[str, Any]],
+        projection_backend: str = "python",
+    ) -> None:
         self.driver = driver
         self.depths = depths
         self.records = records
+        self.projection_backend = projection_backend
         self.local_player = SingleCategoryTreePlayer(global_depth=0)
 
     def play(self, view: PlayerView) -> Move:
@@ -179,7 +187,10 @@ class ComparisonPlayer(Player):
             {"depth": 0, "selected_move": format_move(local_move)},
             [],
         )
-        global_results = {depth: _global_result(view, depth) for depth in self.depths}
+        global_results = {
+            depth: _global_result(view, depth, self.projection_backend)
+            for depth in self.depths
+        }
         all_moves = [local_move, *(result.move for result in global_results.values())]
         deviations = {
             "local_vs_depth": {
@@ -200,6 +211,7 @@ class ComparisonPlayer(Player):
             "compact_t": "".join("-" if owner < 0 else str(owner) for owner in before.T),
             "unresolved_categories": 3 - len(before.resolved_categories),
             "driver_strategy": self.driver,
+            "projection_backend": self.projection_backend,
             "local": {
                 "move": display_move(before, local_move, all_moves),
                 "value": _json_value(local_result.value),
@@ -238,14 +250,25 @@ def _driver_value(driver: str) -> str:
     return "local" if driver == "local" else str(int(driver))
 
 
-def run_game(*, driver: str, depths: tuple[int, ...], seed: int, event_limit: int) -> dict[str, Any]:
+def run_game(
+    *,
+    driver: str,
+    depths: tuple[int, ...],
+    seed: int,
+    event_limit: int,
+    projection_backend: str = "python",
+) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
-    players = tuple(ComparisonPlayer(driver, depths, records) for _ in range(3))
+    players = tuple(
+        ComparisonPlayer(driver, depths, records, projection_backend)
+        for _ in range(3)
+    )
     result = Game(players, first_player=0, seed=seed, max_events=event_limit).run()
     return {
         "seed": seed,
         "driver": driver,
         "depths": list(depths),
+        "projection_backend": projection_backend,
         "event_limit": event_limit,
         "result": {
             "scores": list(result.seat_scores),
@@ -269,7 +292,12 @@ def _deviation_count(games: list[dict[str, Any]], left: str, right: str) -> int:
     return count
 
 
-def write_summary(path: Path, games: list[dict[str, Any]], depths: tuple[int, ...]) -> None:
+def write_summary(
+    path: Path,
+    games: list[dict[str, Any]],
+    depths: tuple[int, ...],
+    projection_backend: str = "python",
+) -> None:
     completed = len(games)
     decisions = sum(len(game["decisions"]) for game in games)
     events = [game["result"]["events"] for game in games]
@@ -279,6 +307,7 @@ def write_summary(path: Path, games: list[dict[str, Any]], depths: tuple[int, ..
         f"games completed: {completed}",
         f"decisions inspected: {decisions}",
         f"mean events: {(sum(events) / len(events)) if events else 0:.2f}",
+        f"projection backend: {projection_backend}",
         "",
         "## Outcomes",
         "",
@@ -328,11 +357,28 @@ def _load_games(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def _driver_arg(value: str) -> str:
+    if value == "local":
+        return value
+    try:
+        depth = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be 'local' or a positive integer") from exc
+    if depth < 1:
+        raise argparse.ArgumentTypeError("must be 'local' or a positive integer")
+    return str(depth)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("decision", "games", "both"), default="decision")
     parser.add_argument("--depths", default="1,2,3")
-    parser.add_argument("--driver", choices=("local", "1", "2", "3"), default="local")
+    parser.add_argument("--driver", type=_driver_arg, default="local")
+    parser.add_argument(
+        "--projection-backend",
+        choices=("python", "numpy", "numba"),
+        default="python",
+    )
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--event-limit", type=int, default=500)
@@ -340,7 +386,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--summary", type=Path, default=Path("results/strategy_compare.md"))
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args(argv)
-    depths = tuple(sorted({int(item) for item in args.depths.split(",") if item.strip()}))
+    try:
+        depths = tuple(sorted({int(item) for item in args.depths.split(",") if item.strip()}))
+    except ValueError:
+        parser.error("--depths must contain positive integers")
     if not depths or any(depth < 1 for depth in depths):
         parser.error("--depths must contain positive integers")
     if args.repeat < 1 or args.event_limit < 0:
@@ -374,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
                 depths=depths,
                 seed=args.seed + index,
                 event_limit=args.event_limit,
+                projection_backend=args.projection_backend,
             )
             game["game_index"] = index
             game["run_mode"] = run_mode
@@ -386,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
     if args.mode in {"decision", "both", "games"}:
-        write_summary(args.summary, games, depths)
+        write_summary(args.summary, games, depths, args.projection_backend)
     return 0
 
 

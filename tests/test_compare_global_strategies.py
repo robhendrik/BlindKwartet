@@ -1,5 +1,8 @@
 import json
 
+import pytest
+
+import scripts.compare_global_strategies as compare
 from scripts.compare_global_strategies import (
     main,
     run_game,
@@ -66,3 +69,51 @@ def test_resume_does_not_duplicate_completed_games(tmp_path):
     assert main(args) == 0
     assert main([*args, "--resume"]) == 0
     assert len(output.read_text().splitlines()) == 2  # local and depth 1
+
+
+def test_projection_backend_numba_parses_and_is_recorded(tmp_path):
+    output = tmp_path / "compare.jsonl"
+    summary = tmp_path / "compare.md"
+    assert main([
+        "--mode", "games", "--depths", "1", "--driver", "1",
+        "--projection-backend", "numba", "--repeat", "1", "--event-limit", "0",
+        "--output", str(output), "--summary", str(summary),
+    ]) == 0
+    payloads = [json.loads(line) for line in output.read_text().splitlines()]
+    assert {payload["projection_backend"] for payload in payloads} == {"numba"}
+    assert "projection backend: numba" in summary.read_text()
+
+
+@pytest.mark.parametrize("driver", ["4", "5"])
+def test_positive_arbitrary_driver_depth_parses(tmp_path, driver):
+    output = tmp_path / f"compare-{driver}.jsonl"
+    summary = tmp_path / f"compare-{driver}.md"
+    assert main([
+        "--mode", "games", "--depths", driver, "--driver", driver,
+        "--repeat", "1", "--event-limit", "0",
+        "--output", str(output), "--summary", str(summary),
+    ]) == 0
+    assert {json.loads(line)["driver"] for line in output.read_text().splitlines()} == {
+        "local", driver,
+    }
+
+
+@pytest.mark.parametrize("driver", ["0", "-1", "not-a-depth", "1.5"])
+def test_nonpositive_or_noninteger_driver_depth_is_rejected(driver):
+    with pytest.raises(SystemExit):
+        main(["--driver", driver])
+
+
+def test_projection_backend_is_passed_to_global_search(monkeypatch):
+    backends = []
+    original = compare._GlobalSearch
+
+    class SpyGlobalSearch(original):
+        def __init__(self, *args, **kwargs):
+            backends.append(kwargs["projection_backend"])
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(compare, "_GlobalSearch", SpyGlobalSearch)
+    run_game(driver="local", depths=(1,), seed=123, event_limit=1, projection_backend="numpy")
+    assert backends
+    assert set(backends) == {"numpy"}
