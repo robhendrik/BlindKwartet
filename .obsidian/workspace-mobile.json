@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "post1/article.md",
+                "file": "Post2/article.md",
                 "mode": "source",
                 "source": false
               },
@@ -117,13 +117,13 @@
         "state": {
           "type": "backlink",
           "state": {
-            "file": "post1/article.md",
+            "file": "Post2/article.md",
             "collapseAll": false,
             "extraContext": false,
             "sortOrder": "alphabetical",
             "showSearch": false,
             "searchQuery": "",
-            "backlinkCollapsed": false,
+            "backlinkCollapsed": true,
             "unlinkedCollapsed": true
           },
           "icon": "links-coming-in",
@@ -175,6 +175,11 @@
   },
   "active": "29df2a000c1d8a89",
   "lastOpenFiles": [
+    "post1/Figure_3.png",
+    "post1/Figure_2.png",
+    "post1/Figure_1.png",
+    "Post2/article.md",
+    "post1/article.md",
     "all_tree_answer.dot",
     "src/blind_kwartet/history.py",
     "src/blind_kwartet/single_category_solver.py",
@@ -185,14 +190,12 @@
     "src/blind_kwartet/search/__init__.py",
     "src/blind_kwartet/search/transforms.py",
     "src/blind_kwartet/search",
-    "src/blind_kwartet/category_projection.py",
     "OUTLINE.md",
     "feature_image.png",
     "strategy_player.md",
     "post1/figures/figure1_state_as_bits.png",
     "post1/figures/feature_image.png",
     "post1/figures/figure2_compressed_state.png",
-    "post1/article.md",
     "proof.md",
     "rules.md",
     "readme.md",
